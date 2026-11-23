@@ -1,0 +1,180 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Dispense Calculator</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root{--accent:#2563eb;--accent-soft:#eff4ff;--ink:#0f172a;--muted:#64748b;--line:#e2e8f0}
+  *{box-sizing:border-box}
+  body{font-family:"Segoe UI Variable","Segoe UI",system-ui,sans-serif;margin:0;padding:24px;color:var(--ink);
+       background:linear-gradient(135deg,#f1f5f9,#e8eefc);min-height:100vh}
+  .card{background:#fff;border-radius:16px;padding:28px;max-width:680px;margin:0 auto;
+        box-shadow:0 10px 30px rgba(15,23,42,.08),0 2px 6px rgba(15,23,42,.05)}
+  h2{margin:0 0 4px;font-size:22px;font-weight:700;letter-spacing:-.01em}
+  .sub{font-size:13px;color:var(--muted);margin-bottom:22px;line-height:1.4}
+  .section{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:0 0 10px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px}
+  .field label{display:block;font-size:12px;font-weight:600;color:#334155;margin-bottom:6px}
+  .row{display:flex;gap:8px}
+  .row select{width:88px;flex:none}
+  input,select{width:100%;padding:10px 12px;border:1px solid #cbd5e1;border-radius:10px;font-size:15px;
+        font-family:inherit;color:var(--ink);background:#fff;transition:border-color .15s,box-shadow .15s,background .15s}
+  input:focus,select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(37,99,235,.18)}
+  input.upd{background:var(--accent-soft);border-color:#93b4f8}
+  input[type=checkbox]{width:18px;height:18px;margin-right:10px;accent-color:var(--accent)}
+  .chk{display:flex;align-items:center;margin:26px 0 14px;padding:12px 14px;background:#f8fafc;border:1px solid var(--line);
+       border-radius:10px;font-size:14px;font-weight:600;cursor:pointer}
+  #two{padding:16px;border:1px solid var(--line);border-radius:12px;background:#fcfdff}
+  .snap{margin-top:16px;padding:10px 14px;border-radius:10px;background:var(--accent-soft);color:#1e40af;font-size:13px}
+  .warn{margin-top:12px;padding:10px 14px;border-radius:10px;background:#fef2f2;color:#b91c1c;font-weight:600;font-size:13px}
+  .flow{margin-top:12px;padding:12px 14px;border-radius:10px;background:#f8fafc;border:1px solid var(--line);font-size:13px;line-height:1.5}
+  .note{font-size:12px;color:var(--muted);margin-top:20px;line-height:1.5}
+  button{margin-top:18px;padding:9px 18px;border:1px solid #cbd5e1;border-radius:10px;background:#fff;
+         font-family:inherit;font-weight:600;font-size:13px;cursor:pointer;transition:background .15s}
+  button:hover{background:#f1f5f9}
+</style>
+</head>
+<body>
+<div class="card">
+  <h2>Dispense Calculator</h2>
+  <div class="sub">Type a value in <b>any</b> field, then press <b>Enter</b> or <b>Tab</b>. The other fields recalculate and are highlighted in blue. Enter a dose to get the dispense volume, or a dispense volume to get the dose.</div>
+
+  <div class="section">Source &amp; dispense</div>
+  <div class="grid">
+    <div class="field"><label>Stock concentration (mM, 100% DMSO)</label><input id="S" type="number" min="0" step="any"></div>
+    <div class="field"><label>Top dose</label>
+      <div class="row"><input id="C" type="number" min="0" step="any">
+      <select id="Cu"><option value="1000">µM</option><option value="1">nM</option></select></div></div>
+    <div class="field"><label>DMSO %</label><input id="P" type="number" min="0" step="any"></div>
+    <div class="field"><label>Volume the dose is dispensed into (µL)</label><input id="V" type="number" min="0" step="any"></div>
+    <div class="field"><label>Dispense volume (nL)</label><input id="D" type="number" min="0" step="any"></div>
+  </div>
+  <div id="last" class="note" style="margin-top:10px"></div>
+  <div id="snap" class="snap"></div>
+  <div id="flow" class="flow"></div>
+
+  <label class="chk"><input id="bchk" type="checkbox">Backfill with solvent to a set volume</label>
+  <div id="back" style="display:none;padding:16px;border:1px solid var(--line);border-radius:12px;background:#fcfdff">
+    <div class="grid">
+      <div class="field"><label>Backfill to volume (µL)</label><input id="B" type="number" min="0" step="any"></div>
+      <div class="field"><label>Concentration after backfill</label>
+        <div class="row"><input id="Cb" type="number" min="0" step="any">
+        <select id="Cbu"><option value="1000">µM</option><option value="1">nM</option></select></div></div>
+      <div class="field"><label>DMSO % after backfill</label><input id="Pb" type="number" min="0" step="any"></div>
+    </div>
+  </div>
+
+  <label class="chk"><input id="chk" type="checkbox">Transfer to a new plate and dilute again (takes from the backfilled well if backfill is on)</label>
+  <div id="two" style="display:none">
+    <div class="grid">
+      <div class="field"><label>Volume transferred out of the well (µL)</label><input id="T" type="number" min="0" step="any"></div>
+      <div class="field"><label>Total volume after adding diluent (µL)</label><input id="W" type="number" min="0" step="any"></div>
+      <div class="field"><label>Concentration after transfer</label>
+        <div class="row"><input id="Cf" type="number" min="0" step="any">
+        <select id="Cfu"><option value="1000">µM</option><option value="1">nM</option></select></div></div>
+      <div class="field"><label>DMSO % after transfer</label><input id="Pf" type="number" min="0" step="any"></div>
+    </div>
+  </div>
+  <div id="msg"></div>
+  <button id="reset" type="button">Reset</button>
+  <div class="note">DMSO % = dose ÷ stock × 100; dispense = dose × volume ÷ stock, in 2.5 nL steps. After backfill: conc = dose × dose volume ÷ backfill volume. After transfer: conc × transferred volume ÷ total volume. Editing any result back-calculates the dose.</div>
+</div>
+<script>
+const $ = id => document.getElementById(id);
+const num = x => +(+x).toPrecision(4);
+const st0 = {S:10, C:10000, V:50, B:100, T:5, W:50}; // S mM, C nM, V/T/W µL
+const m = {};
+
+function snm(){ return m.S*1e6; }
+function fb(){ return $("bchk").checked && m.B>0 ? m.V/m.B : 1; }
+let adjusted = null;
+function derive(){
+  const raw = m.C*m.V*1000/snm();
+  m.D = Math.max(1, Math.round(raw/2.5))*2.5;
+  adjusted = Math.abs(m.D-raw) > 1e-9 ? m.C : null;
+  m.C = m.D*snm()/(m.V*1000);
+  m.P = m.C/snm()*100;
+  m.Cb = m.C*fb(); m.Pb = m.P*fb();
+  if(m.T>0 && m.W>0){ m.Cf = m.Cb*m.T/m.W; m.Pf = m.Pb*m.T/m.W; }
+  else { m.Cf = null; m.Pf = null; }
+}
+function setConc(id, nM){
+  const u = nM>=1000 ? 1000 : 1;
+  $(id+"u").value = u; $(id).value = num(nM/u);
+}
+const NAMES={S:"Stock concentration",C:"Top dose",P:"DMSO %",V:"Dose volume",D:"Dispense volume",B:"Backfill volume",Cb:"Concentration after backfill",Pb:"DMSO % after backfill",T:"Transfer volume",W:"Total volume after dilution",Cf:"Concentration after transfer",Pf:"DMSO % after transfer"};
+function show(changed, err){
+  $("S").value = num(m.S);
+  setConc("C", m.C);
+  $("P").value = num(m.P);
+  $("V").value = num(m.V);
+  $("D").value = num(m.D);
+  $("T").value = num(m.T);
+  $("W").value = num(m.W);
+  $("B").value = num(m.B); setConc("Cb", m.Cb); $("Pb").value = num(m.Pb);
+  if(m.Cf!=null){ setConc("Cf", m.Cf); $("Pf").value = num(m.Pf); } else { $("Cf").value=""; $("Pf").value=""; }
+  ["S","C","P","V","D","T","W","B","Cb","Pb","Cf","Pf"].forEach(id=>$(id).classList.remove("upd"));
+  ["S","C","P","V","D","Cb","Pb","Cf","Pf"].forEach(id=>{ if(id!==changed) $(id).classList.add("upd"); });
+  $("T").classList.remove("upd"); $("W").classList.remove("upd");
+  if(!$("chk").checked) ["Cf","Pf"].forEach(id=>$(id).classList.remove("upd"));
+  if(!$("bchk").checked) ["Cb","Pb"].forEach(id=>$(id).classList.remove("upd"));
+
+  $("snap").textContent = adjusted!=null ? "Dispense rounded to a 2.5 nL step; requested dose "+fmtConc(adjusted)+" adjusted to "+fmtConc(m.C)+"." : "Dispense is a multiple of 2.5 nL.";
+  let msg = err ? '<div class="warn">'+err+'</div>' : "";
+  if($("chk").checked && m.T>m.W) msg += '<div class="warn">Transferred volume exceeds the total volume after dilution.</div>';
+  $("msg").innerHTML = msg;
+  $("last").textContent = changed ? "You edited: "+NAMES[changed]+". Linked fields were recalculated." : "";
+  let flow = "<b>Summary:</b> "+fmtConc(m.C)+" ("+num(m.P)+"% DMSO) from "+num(m.D)+" nL into "+num(m.V)+" µL";
+  if($("bchk").checked) flow += " &rarr; backfill to "+num(m.B)+" µL = <b>"+fmtConc(m.Cb)+"</b> ("+num(m.Pb)+"%)";
+  if($("chk").checked && m.Cf!=null) flow += " &rarr; transfer "+num(m.T)+" µL into "+num(m.W)+" µL = <b>"+fmtConc(m.Cf)+"</b> ("+num(m.Pf)+"%)";
+  $("flow").innerHTML = flow;
+}
+function fmtConc(nM){ return nM>=1e6 ? num(nM/1e6)+" mM" : nM>=1e3 ? num(nM/1e3)+" µM" : num(nM)+" nM"; }
+
+function edited(id){
+  const el = $(id), v = parseFloat(el.value);
+  if(!(v>=0) || !isFinite(v)){ show(null, "Enter a valid number (0 or higher) for "+NAMES[id]+"; previous value restored."); return; }
+  if(["S","V","B"].includes(id) && !(v>0)){ show(null, NAMES[id]+" must be greater than 0; previous value restored."); return; }
+  const unit = k => +$(k+"u").value;
+  switch(id){
+    case "S": if(v>0) m.S = v; break;
+    case "C": m.C = v*unit("C"); break;
+    case "P": m.C = v/100*snm(); break;
+    case "V": if(v>0) m.V = v; break;
+    case "D": if(m.V>0) m.C = v*snm()/(m.V*1000); break;
+    case "T": m.T = v; break;
+    case "W": m.W = v; break;
+    case "B": if(v>0) m.B = v; break;
+    case "Cb": m.C = v*unit("Cb")/fb(); break;
+    case "Pb": m.C = (v/100*snm())/fb(); break;
+    case "Cf": if(m.T>0 && m.W>0) m.C = v*unit("Cf")*m.W/m.T/fb(); break;
+    case "Pf": if(m.T>0 && m.W>0) m.C = (v/100*snm())*m.W/m.T/fb(); break;
+  }
+  derive(); show(id);
+}
+
+["S","C","P","V","D","T","W","B","Cb","Pb","Cf","Pf"].forEach(id=>$(id).addEventListener("change",()=>edited(id)));
+$("Cu").addEventListener("change",()=>edited("C"));
+$("Cfu").addEventListener("change",()=>edited("Cf"));
+$("Cbu").addEventListener("change",()=>edited("Cb"));
+$("bchk").addEventListener("change",()=>{ $("back").style.display = $("bchk").checked ? "block" : "none"; derive(); show(null); });
+
+$("chk").addEventListener("change",()=>{ $("two").style.display = $("chk").checked ? "block" : "none"; derive(); show(null); });
+$("reset").addEventListener("click",()=>{ Object.assign(m, st0); derive(); show(null); });
+
+Object.assign(m, st0); derive(); show(null);
+["S","C","P","V","D","Cb","Pb","Cf","Pf"].forEach(id=>$(id).classList.remove("upd"));
+</script>
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+
