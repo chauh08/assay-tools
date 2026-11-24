@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Plate Map Viewer</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 14px; font-family: "Segoe UI", system-ui, sans-serif; background: #f3f5f9; color: #1f2937; }
+  .card { background: #fff; border-radius: 14px; padding: 18px 20px; box-shadow: 0 2px 12px rgba(0,0,0,.08); margin-bottom: 14px; }
+  h2 { margin: 0 0 2px; font-size: 22px; }
+  .sub { color: #6b7280; font-size: 14px; margin-bottom: 14px; }
+  #drop { border: 2px dashed #9ca3af; border-radius: 12px; padding: 22px; text-align: center; cursor: pointer; color: #4b5563; background: #f9fafb; }
+  #drop.over { border-color: #2563eb; background: #eff6ff; }
+  #drop b { color: #1d4ed8; }
+  .chips { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip { background: #e0e7ff; color: #3730a3; border-radius: 999px; padding: 3px 10px; font-size: 12px; }
+  .chip.err { background: #fee2e2; color: #991b1b; }
+  .controls { display: flex; flex-wrap: wrap; gap: 14px 22px; align-items: flex-end; }
+  .controls label { display: block; font-size: 12px; font-weight: 600; color: #374151; margin-bottom: 4px; }
+  select, button { font: inherit; padding: 8px 10px; border: 1.5px solid #d1d5db; border-radius: 8px; background: #fff; }
+  button { cursor: pointer; }
+  button:hover { border-color: #2563eb; }
+  .checks label { display: inline-block; font-weight: 400; font-size: 13px; margin-right: 10px; }
+  #summary { font-size: 13px; color: #4b5563; margin: 12px 0 8px; }
+  #legend { display: flex; align-items: center; gap: 8px; font-size: 12px; color: #4b5563; margin-bottom: 10px; flex-wrap: wrap; }
+  #bar { width: 220px; height: 12px; border-radius: 6px; }
+  .sw { display: inline-flex; align-items: center; gap: 4px; margin-right: 8px; }
+  .sw i { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+  #scroll { overflow: auto; max-height: 640px; border: 1px solid #e5e7eb; border-radius: 10px; }
+  #grid { display: grid; width: max-content; padding: 4px; gap: 2px; }
+  .h { position: sticky; background: #f3f4f6; font-size: 11px; font-weight: 700; color: #6b7280; display: flex; align-items: center; justify-content: center; z-index: 2; }
+  .h.col { top: 0; height: 22px; }
+  .h.row { left: 0; width: 28px; }
+  .h.corner { top: 0; left: 0; z-index: 3; }
+  .w { border-radius: 6px; padding: 3px 4px; overflow: hidden; line-height: 1.25; min-height: 30px; border: 1px solid rgba(0,0,0,.06); }
+  .w.empty { background: #f9fafb; border: 1px dashed #e5e7eb; }
+  .w div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .w .n { font-size: 0.78em; opacity: .65; font-weight: 700; }
+  .w .v { font-weight: 700; }
+  .w .b { opacity: .85; }
+  #tip { position: fixed; display: none; pointer-events: none; background: #111827; color: #f9fafb; font-size: 12px; padding: 8px 10px; border-radius: 8px; max-width: 320px; z-index: 10; line-height: 1.45; }
+  #tip b { color: #93c5fd; }
+  .note { font-size: 12px; color: #6b7280; }
+  #empty { color: #6b7280; padding: 30px; text-align: center; }
+</style>
+</head>
+<body>
+<div class="card">
+  <h2>Plate Map Viewer</h2>
+  <div class="sub">Load an Echo transfer file and/or a Mosaic dispatch file to see each plate as a heatmap.</div>
+  <div id="drop"><b>Click to choose files</b> or drag them here<br><span class="note">Echo transfer file (.csv) and Mosaic dispatch file (.xls / .csv). You can load several at once. Files are read in your browser only; nothing is uploaded.</span></div>
+  <input id="file" type="file" multiple accept=".csv,.xls,.xml,.txt" style="display:none">
+  <div class="chips" id="chips"></div>
+</div>
+
+<div class="card" id="viewer" style="display:none">
+  <div class="controls">
+    <div><label for="plate">Plate</label><select id="plate"></select></div>
+    <div><label for="metric">Color by</label>
+      <select id="metric">
+        <option value="vol">Volume</option>
+        <option value="conc">Concentration</option>
+        <option value="id">Sample / batch</option>
+      </select></div>
+    <div><label for="zoom">Cell size</label><input id="zoom" type="range" min="70" max="150" value="100"></div>
+    <div class="checks"><label style="margin-bottom:4px">Show in wells</label>
+      <label><input type="checkbox" id="sWell" checked> Well</label>
+      <label><input type="checkbox" id="sVol" checked> Volume</label>
+      <label><input type="checkbox" id="sConc" checked> Conc.</label>
+      <label><input type="checkbox" id="sId" checked> Sample ID</label>
+      <label><input type="checkbox" id="sBatch" checked> Batch</label>
+    </div>
+  </div>
+  <div id="summary"></div>
+  <div id="legend"></div>
+  <div id="scroll"><div id="grid"></div></div>
+  <div class="note" style="margin-top:8px">Hover a well for full details. Wells that received several transfers show the summed volume.</div>
+</div>
+<div id="tip"></div>
+
+<script>
+var plates = {};
+var $ = function (id) { return document.getElementById(id); };
+var UNIT = { "M": 1, "mM": 1e-3, "uM": 1e-6, "µM": 1e-6, "nM": 1e-9, "pM": 1e-12, "fM": 1e-15 };
+var STOPS = ["#f7fbff", "#c6dbef", "#6baed6", "#2171b5", "#08306b"];
+
+function esc(s) { return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
+function trim(s) { return (s == null ? "" : String(s)).trim(); }
+
+function parseCSV(t) {
+  var rows = [], row = [], f = "", q = false, i, c;
+  for (i = 0; i < t.length; i++) {
+    c = t.charAt(i);
+    if (q) {
+      if (c === '"') { if (t.charAt(i + 1) === '"') { f += '"'; i++; } else q = false; }
+      else f += c;
+    } else if (c === '"') q = true;
+    else if (c === ",") { row.push(f); f = ""; }
+    else if (c === "\n") { row.push(f); rows.push(row); row = []; f = ""; }
+    else if (c !== "\r") f += c;
+  }
+  if (f !== "" || row.length) { row.push(f); rows.push(row); }
+  return rows;
+}
+
+function parseSheetXML(text) {
+  var SS = "urn:schemas-microsoft-com:office:spreadsheet";
+  var doc = new DOMParser().parseFromString(text, "text/xml");
+  if (doc.getElementsByTagName("parsererror").length) throw new Error("XML could not be parsed: " + doc.getElementsByTagName("parsererror")[0].textContent.slice(0, 120));
+  var ws = doc.getElementsByTagNameNS(SS, "Worksheet")[0];
+  if (!ws) throw new Error("No worksheet found");
+  var out = [], rowEls = ws.getElementsByTagNameNS(SS, "Row"), i, j;
+  for (i = 0; i < rowEls.length; i++) {
+    var cells = rowEls[i].getElementsByTagNameNS(SS, "Cell"), arr = [], pos = 0;
+    for (j = 0; j < cells.length; j++) {
+      var ix = cells[j].getAttributeNS(SS, "Index");
+      if (ix) pos = parseInt(ix, 10) - 1;
+      var d = cells[j].getElementsByTagNameNS(SS, "Data")[0];
+      arr[pos] = d ? d.textContent : "";
+      pos++;
+    }
+    for (j = 0; j < arr.length; j++) if (arr[j] === undefined) arr[j] = "";
+    out.push(arr);
+  }
+  return out;
+}
+
+function wellPos(w) {
+  var m = /^([A-Za-z]+)0*(\d+)$/.exec(trim(w));
+  if (!m) return null;
+  var L = m[1].toUpperCase(), r = 0, k;
+  for (k = 0; k < L.length; k++) r = r * 26 + (L.charCodeAt(k) - 64);
+  return { r: r - 1, c: parseInt(m[2], 10) - 1, name: L + parseInt(m[2], 10) };
+}
+
+function colIndex(header) {
+  var map = {};
+  header.forEach(function (h, i) { map[trim(h).toLowerCase()] = i; });
+  return function (name) { var i = map[name.toLowerCase()]; return i === undefined ? -1 : i; };
+}
+
+function getPlate(bc) {
+  if (!plates[bc]) plates[bc] = { barcode: bc, dest: {}, src: {}, mos: {} };
+  return plates[bc];
+}
+
+function toM(v, unit) {
+  var n = parseFloat(v), f = UNIT[trim(unit)];
+  return isFinite(n) && f ? n * f : null;
+}
+
+function ingestEcho(rows) {
+  var di = -1, i;
+  for (i = 0; i < rows.length; i++) if (trim(rows[i][0]) === "[DETAILS]") { di = i; break; }
+  if (di < 0) throw new Error("No [DETAILS] section");
+  var g = colIndex(rows[di + 1]);
+  var cols = {
+    sb: g("Source Plate Barcode"), sn: g("Source Plate Name"), sw: g("Source Well"),
+    db: g("Destination Plate Barcode"), dn: g("Destination Plate Name"), dw: g("Destination Well"),
+    tv: g("Transfer Volume"), av: g("Actual Volume"),
+    sc: g("Source Concentration"), scu: g("Source Concentration Units"),
+    dc: g("Destination Concentration"), dcu: g("Destination Concentration Units"),
+    sid: g("Sample ID"), snm: g("Sample Name")
+  };
+  function val(row, k) { return cols[k] < 0 ? "" : trim(row[cols[k]]); }
+  var n = 0;
+  for (i = di + 2; i < rows.length; i++) {
+    var row = rows[i];
+    if (!row || trim(row.join("")) === "" || trim(row[0]).charAt(0) === "[") break;
+    var sp = wellPos(val(row, "sw")), dp = wellPos(val(row, "dw"));
+    if (!sp || !dp) continue;
+    var sb = val(row, "sb") || val(row, "sn"), db = val(row, "db") || val(row, "dn");
+    var vol = parseFloat(val(row, "av")); if (!isFinite(vol)) vol = parseFloat(val(row, "tv")); if (!isFinite(vol)) vol = 0;
+    var sid = val(row, "sid"), snm = val(row, "snm");
+
+    var d = getPlate(db).dest[dp.name] || (getPlate(db).dest[dp.name] = { pos: dp, vol: 0, n: 0, conc: null, ids: [], names: [], from: [] });
+    d.vol += vol; d.n++;
+    var dc = toM(val(row, "dc"), val(row, "dcu")); if (dc !== null) d.conc = dc;
+    if (sid && d.ids.indexOf(sid) < 0) d.ids.push(sid);
+    if (snm && d.names.indexOf(snm) < 0) d.names.push(snm);
+    d.from.push({ plate: sb, well: sp.name });
+
+    var s = getPlate(sb).src[sp.name] || (getPlate(sb).src[sp.name] = { pos: sp, vol: 0, n: 0, conc: null, ids: [], names: [], to: [] });
+    s.vol += vol; s.n++;
+    var sc = toM(val(row, "sc"), val(row, "scu")); if (sc !== null) s.conc = sc;
+    if (sid && s.ids.indexOf(sid) < 0) s.ids.push(sid);
+    if (snm && s.names.indexOf(snm) < 0) s.names.push(snm);
+    s.to.push({ plate: db, well: dp.name });
+    n++;
+  }
+  return n + " transfers";
+}
+
+function ingestMosaic(rows) {
+  var hi = -1, i;
+  for (i = 0; i < rows.length; i++) {
+    var low = rows[i].map(function (x) { return trim(x).toLowerCase(); });
+    if (low.indexOf("position") >= 0 && low.indexOf("plate barcode") >= 0) { hi = i; break; }
+  }
+  if (hi < 0) throw new Error("No 'Plate Barcode' / 'Position' header");
+  var g = colIndex(rows[hi]), n = 0;
+  function v(row, name) { var k = g(name); return k < 0 ? "" : trim(row[k]); }
+  for (i = hi + 1; i < rows.length; i++) {
+    var row = rows[i], bc = v(row, "Plate Barcode"), p = wellPos(v(row, "Position"));
+    if (!bc || !p) continue;
+    getPlate(bc).mos[p.name] = {
+      pos: p, compound: v(row, "Compound"), batch: v(row, "Batch"), mw: v(row, "Molecular Weight"),
+      amount: v(row, "Amount"), amountUnits: v(row, "Amount Units"),
+      conc: v(row, "Concentration"), concUnits: v(row, "Concentration Units"),
+      solvent: v(row, "Solvent"), solventPct: v(row, "Solvent Concentration [%]"),
+      tube: v(row, "Source Tube"), precip: v(row, "Precipitate"), comments: v(row, "Comments")
+    };
+    n++;
+  }
+  return n + " wells";
+}
+
+function ingestText(name, text) {
+  var kind, info;
+  text = text.replace(/^\s+/, "");
+  if (text.indexOf("[DETAILS]") >= 0) { kind = "Echo"; info = ingestEcho(parseCSV(text)); }
+  else if (/^\s*<\?xml/.test(text) || text.indexOf("urn:schemas-microsoft-com:office:spreadsheet") >= 0) { kind = "Mosaic"; info = ingestMosaic(parseSheetXML(text)); }
+  else if (text.toLowerCase().indexOf("plate barcode") >= 0) { kind = "Mosaic"; info = ingestMosaic(parseCSV(text)); }
+  else throw new Error("not recognised as an Echo transfer or Mosaic dispatch file");
+  return kind + " · " + info;
+}
+
+function addChip(text, err) {
+  var c = document.createElement("span");
+  c.className = "chip" + (err ? " err" : "");
+  c.textContent = text;
+  $("chips").appendChild(c);
+}
+
+function loadFiles(list) {
+  var files = Array.prototype.slice.call(list);
+  Promise.all(files.map(function (f) {
+    return f.text().then(function (t) {
+      try { addChip(f.name + " — " + ingestText(f.name, t)); }
+      catch (e) { addChip(f.name + " — " + e.message + (/\.xlsx$/i.test(f.name) ? " (save as .xls XML or CSV)" : ""), true); }
+    });
+  })).then(refreshPlates);
+}
+
+function lookupMos(bc, well) { var p = plates[bc]; return p && p.mos[well] ? p.mos[well] : null; }
+
+function roleLabel(r) { return r === "dest" ? "Destination (received)" : r === "src" ? "Source (removed)" : "Mosaic dispatch"; }
+
+function refreshPlates() {
+  var sel = $("plate"), prev = sel.value, opts = [];
+  Object.keys(plates).sort().forEach(function (bc) {
+    var p = plates[bc];
+    if (Object.keys(p.mos).length) opts.push([bc + "|mos", bc + " — " + roleLabel("mos")]);
+    if (Object.keys(p.dest).length) opts.push([bc + "|dest", bc + " — " + roleLabel("dest")]);
+    if (Object.keys(p.src).length) opts.push([bc + "|src", bc + " — " + roleLabel("src")]);
+  });
+  sel.innerHTML = "";
+  opts.forEach(function (o) {
+    var el = document.createElement("option"); el.value = o[0]; el.textContent = o[1]; sel.appendChild(el);
+  });
+  if (!opts.length) { $("viewer").style.display = "none"; return; }
+  if (prev && opts.some(function (o) { return o[0] === prev; })) sel.value = prev;
+  $("viewer").style.display = "";
+  render();
+}
+
+function fmtNum(x, p) { return String(parseFloat(x.toPrecision(p || 4))); }
+function fmtConc(m) {
+  if (m === null || m === undefined) return "";
+  if (m === 0) return "0";
+  var u = [["M", 1], ["mM", 1e-3], ["µM", 1e-6], ["nM", 1e-9], ["pM", 1e-12], ["fM", 1e-15]], i;
+  for (i = 0; i < u.length; i++) if (m >= u[i][1] * 0.9999) return fmtNum(m / u[i][1]) + " " + u[i][0];
+  return fmtNum(m / 1e-15) + " fM";
+}
+function fmtVol(v, unit) { return v === null ? "" : fmtNum(v) + " " + (unit || ""); }
+function uLabel(u) { return trim(u).replace(/^u/, "µ"); }
+
+function buildItems(bc, role) {
+  var p = plates[bc], items = [], k;
+  if (role === "mos") {
+    for (k in p.mos) {
+      var m = p.mos[k], amt = parseFloat(m.amount);
+      items.push({
+        pos: m.pos, vol: isFinite(amt) ? amt : null, volUnit: uLabel(m.amountUnits),
+        conc: toM(m.conc, m.concUnits), concText: m.conc ? fmtNum(parseFloat(m.conc)) + " " + m.concUnits : "",
+        id: m.compound, batch: m.batch,
+        tip: [["Compound", m.compound], ["Batch", m.batch], ["MW", m.mw], ["Amount", m.amount ? m.amount + " " + uLabel(m.amountUnits) : ""],
+          ["Conc.", m.conc ? m.conc + " " + m.concUnits : ""], ["Solvent", m.solvent ? m.solvent + (m.solventPct ? " (" + m.solventPct + "%)" : "") : ""],
+          ["Tube", m.tube], ["Precipitate", m.precip], ["Comments", m.comments]]
+      });
+    }
+  } else {
+    var store = role === "dest" ? p.dest : p.src;
+    for (k in store) {
+      var e = store[k], batches = [], comps = [], partners = [];
+      (role === "dest" ? e.from : e.to).forEach(function (f) {
+        partners.push(f.plate + " " + f.well);
+        var mo = role === "dest" ? lookupMos(f.plate, f.well) : lookupMos(bc, k);
+        if (mo) {
+          if (mo.batch && batches.indexOf(mo.batch) < 0) batches.push(mo.batch);
+          if (mo.compound && comps.indexOf(mo.compound) < 0) comps.push(mo.compound);
+        }
+      });
+      if (role === "src") { var own = lookupMos(bc, k); if (own) { if (own.batch) batches = [own.batch]; if (own.compound) comps = [own.compound]; } }
+      items.push({
+        pos: e.pos, vol: e.vol, volUnit: "nL", conc: e.conc, concText: fmtConc(e.conc),
+        id: e.ids.join(", "), batch: batches.join(", "),
+        tip: [["Sample ID", e.ids.join(", ")], ["Sample name", e.names.join(", ")], ["Compound", comps.join(", ")], ["Batch", batches.join(", ")],
+          ["Total volume", fmtVol(e.vol, "nL") + (e.n > 1 ? " (" + e.n + " transfers)" : "")],
+          [role === "dest" ? "Final conc." : "Source conc.", fmtConc(e.conc)],
+          [role === "dest" ? "From" : "To", partners.length > 4 ? partners.slice(0, 4).join("; ") + "; +" + (partners.length - 4) + " more" : partners.join("; ")]]
+      });
+    }
+  }
+  return items;
+}
+
+function lerpColor(t) {
+  t = Math.max(0, Math.min(1, t));
+  var s = t * (STOPS.length - 1), i = Math.min(Math.floor(s), STOPS.length - 2), f = s - i;
+  function h(c) { return [parseInt(c.substr(1, 2), 16), parseInt(c.substr(3, 2), 16), parseInt(c.substr(5, 2), 16)]; }
+  var a = h(STOPS[i]), b = h(STOPS[i + 1]);
+  return "rgb(" + a.map(function (x, j) { return Math.round(x + (b[j] - x) * f); }).join(",") + ")";
+}
+
+function render() {
+  var parts = $("plate").value.split("|"), bc = parts[0], role = parts[1];
+  var items = buildItems(bc, role), metric = $("metric").value;
+  var maxR = 0, maxC = 0;
+  items.forEach(function (it) { maxR = Math.max(maxR, it.pos.r); maxC = Math.max(maxC, it.pos.c); });
+  var rows = 8, cols = 12;
+  if (maxR >= 8 || maxC >= 12) { rows = 16; cols = 24; }
+  if (maxR >= 16 || maxC >= 24) { rows = 32; cols = 48; }
+
+  var byPos = {};
+  items.forEach(function (it) { byPos[it.pos.r + "," + it.pos.c] = it; });
+
+  // color mapping
+  var legend = $("legend"), colorOf, textLight = function () { return false; };
+  legend.innerHTML = "";
+  if (metric === "id") {
+    var keys = [];
+    items.forEach(function (it) { var k = it.batch || it.id || "(none)"; if (keys.indexOf(k) < 0) keys.push(k); });
+    colorOf = function (it) { var i = keys.indexOf(it.batch || it.id || "(none)"); return "hsl(" + Math.round((i * 137.5) % 360) + ",65%,82%)"; };
+    legend.appendChild(document.createTextNode(keys.length + " distinct: "));
+    keys.slice(0, 12).forEach(function (k) {
+      var s = document.createElement("span"); s.className = "sw";
+      s.innerHTML = '<i style="background:' + colorOf({ batch: k }) + '"></i>' + esc(k);
+      legend.appendChild(s);
+    });
+    if (keys.length > 12) legend.appendChild(document.createTextNode("+" + (keys.length - 12) + " more"));
+  } else {
+    var useLog = metric === "conc", vals = [];
+    items.forEach(function (it) {
+      var v = metric === "conc" ? it.conc : it.vol;
+      it.val = v !== null && v !== undefined && isFinite(v) && (!useLog || v > 0) ? (useLog ? Math.log10(v) : v) : null;
+      if (it.val !== null) vals.push(it.val);
+    });
+    var mn = Math.min.apply(null, vals), mx = Math.max.apply(null, vals);
+    var tOf = function (it) { return it.val === null ? null : (mx === mn ? 0.6 : (it.val - mn) / (mx - mn)); };
+    colorOf = function (it) { var t = tOf(it); return t === null ? "#e5e7eb" : lerpColor(t); };
+    textLight = function (it) { var t = tOf(it); return t !== null && t > 0.55; };
+    var unitTxt = metric === "conc" ? "" : (items[0] && items[0].volUnit ? " " + items[0].volUnit : "");
+    var lo = metric === "conc" ? fmtConc(Math.pow(10, mn)) : fmtNum(mn) + unitTxt;
+    var hi = metric === "conc" ? fmtConc(Math.pow(10, mx)) : fmtNum(mx) + unitTxt;
+    if (!vals.length) { lo = hi = "n/a"; }
+    legend.innerHTML = esc(lo) + '<div id="bar" style="background:linear-gradient(to right,' + STOPS.join(",") + ')"></div>' + esc(hi) +
+      (metric === "conc" ? " (log scale)" : "");
+  }
+
+  var cw = Math.round(1.0 * $("zoom").value * 0.92), fs = Math.round($("zoom").value * 0.11);
+  var grid = $("grid");
+  grid.style.gridTemplateColumns = "28px repeat(" + cols + ", " + cw + "px)";
+  grid.style.fontSize = fs + "px";
+  grid.innerHTML = "";
+  var corner = document.createElement("div"); corner.className = "h corner"; grid.appendChild(corner);
+  var c, r;
+  for (c = 0; c < cols; c++) { var hc = document.createElement("div"); hc.className = "h col"; hc.textContent = c + 1; grid.appendChild(hc); }
+  var showWell = $("sWell").checked, sVol = $("sVol").checked, sConc = $("sConc").checked, sId = $("sId").checked, sBatch = $("sBatch").checked;
+  for (r = 0; r < rows; r++) {
+    var L = r < 26 ? String.fromCharCode(65 + r) : "A" + String.fromCharCode(65 + r - 26);
+    var hr = document.createElement("div"); hr.className = "h row"; hr.textContent = L; grid.appendChild(hr);
+    for (c = 0; c < cols; c++) {
+      var it = byPos[r + "," + c], d = document.createElement("div");
+      if (!it) { d.className = "w empty"; grid.appendChild(d); continue; }
+      d.className = "w";
+      d.style.background = colorOf(it);
+      d.style.color = textLight(it) ? "#fff" : "#111827";
+      var html = "";
+      if (showWell) html += '<div class="n">' + L + (c + 1) + "</div>";
+      if (sVol && it.vol !== null) html += '<div class="v">' + esc(fmtVol(it.vol, it.volUnit)) + "</div>";
+      if (sConc && it.concText) html += "<div>" + esc(it.concText) + "</div>";
+      if (sId && it.id) html += "<div>" + esc(it.id) + "</div>";
+      if (sBatch && it.batch) html += '<div class="b">' + esc(it.batch) + "</div>";
+      d.innerHTML = html;
+      d.dataset.tip = '<b>' + L + (c + 1) + "</b><br>" + it.tip.filter(function (t) { return t[1]; })
+        .map(function (t) { return esc(t[0]) + ": " + esc(t[1]); }).join("<br>");
+      grid.appendChild(d);
+    }
+  }
+
+  var sum = items.length + " wells filled on " + bc + " · " + roleLabel(role) + " · " + (rows * cols) + "-well layout";
+  if (role !== "mos") {
+    var tot = items.reduce(function (a, it) { return a + (it.vol || 0); }, 0);
+    sum += " · total " + fmtNum(tot, 6) + " nL transferred";
+  }
+  $("summary").textContent = sum;
+}
+
+var tip = $("tip");
+$("grid").addEventListener("mousemove", function (e) {
+  var w = e.target.closest ? e.target.closest(".w") : null;
+  if (!w || !w.dataset.tip) { tip.style.display = "none"; return; }
+  tip.innerHTML = w.dataset.tip; tip.style.display = "block";
+  var x = e.clientX + 14, y = e.clientY + 14;
+  if (x + 330 > window.innerWidth) x = e.clientX - 330;
+  if (y + tip.offsetHeight > window.innerHeight) y = e.clientY - tip.offsetHeight - 10;
+  tip.style.left = Math.max(0, x) + "px"; tip.style.top = Math.max(0, y) + "px";
+});
+$("grid").addEventListener("mouseleave", function () { tip.style.display = "none"; });
+
+["plate", "metric", "zoom", "sWell", "sVol", "sConc", "sId", "sBatch"].forEach(function (id) {
+  $(id).addEventListener("input", render);
+  $(id).addEventListener("change", render);
+});
+
+var drop = $("drop");
+drop.addEventListener("click", function () { $("file").click(); });
+$("file").addEventListener("change", function () { loadFiles(this.files); this.value = ""; });
+drop.addEventListener("dragover", function (e) { e.preventDefault(); drop.classList.add("over"); });
+drop.addEventListener("dragleave", function () { drop.classList.remove("over"); });
+drop.addEventListener("drop", function (e) { e.preventDefault(); drop.classList.remove("over"); loadFiles(e.dataTransfer.files); });
+</script>
+</body>
+</html>
