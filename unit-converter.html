@@ -1,0 +1,132 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Unit Converter</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root{--accent:#2563eb;--accent-soft:#eff4ff;--ink:#0f172a;--muted:#64748b;--line:#e2e8f0}
+  *{box-sizing:border-box}
+  body{font-family:"Segoe UI Variable","Segoe UI",system-ui,sans-serif;margin:0;padding:24px;color:var(--ink);
+       background:linear-gradient(135deg,#f1f5f9,#e8eefc);min-height:100vh}
+  .card{background:#fff;border-radius:16px;padding:28px;max-width:680px;margin:0 auto 20px;
+        box-shadow:0 10px 30px rgba(15,23,42,.08),0 2px 6px rgba(15,23,42,.05)}
+  h2{margin:0 0 4px;font-size:22px;font-weight:700;letter-spacing:-.01em}
+  .sub{font-size:13px;color:var(--muted);margin-bottom:22px;line-height:1.4}
+  .section{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:0 0 10px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px}
+  .field label{display:block;font-size:12px;font-weight:600;color:#334155;margin-bottom:6px}
+  .row{display:flex;gap:8px}
+  .row select{width:96px;flex:none}
+  input,select{width:100%;padding:10px 12px;border:1px solid #cbd5e1;border-radius:10px;font-size:15px;
+        font-family:inherit;color:var(--ink);background:#fff;transition:border-color .15s,box-shadow .15s,background .15s}
+  input:focus,select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(37,99,235,.18)}
+  input.upd{background:var(--accent-soft);border-color:#93b4f8}
+  .info{margin-top:16px;padding:10px 14px;border-radius:10px;background:var(--accent-soft);color:#1e40af;font-size:13px;min-height:38px}
+  .warn{margin-top:12px;padding:10px 14px;border-radius:10px;background:#fef2f2;color:#b91c1c;font-weight:600;font-size:13px}
+  .note{font-size:12px;color:var(--muted);margin-top:16px;line-height:1.5}
+  button{margin-top:16px;padding:9px 18px;border:1px solid #cbd5e1;border-radius:10px;background:#fff;
+         font-family:inherit;font-weight:600;font-size:13px;cursor:pointer}
+  button:hover{background:#f1f5f9}
+</style>
+</head>
+<body>
+<div class="card">
+  <h2>Unit Converter</h2>
+  <div class="sub">Type a value in <b>any</b> field, then press <b>Enter</b> or <b>Tab</b>. Linked fields recalculate and turn blue. Molecular weight is needed to convert between molar and mass units.</div>
+
+  <div class="section">Molarity ↔ mass concentration</div>
+  <div class="grid">
+    <div class="field"><label>Molecular weight (g/mol)</label><input id="MW" type="number" min="0" step="any"></div>
+    <div class="field"><label>Molar concentration</label>
+      <div class="row"><input id="M" type="number" min="0" step="any">
+      <select id="Mu"><option value="1">M</option><option value="1e-3">mM</option><option value="1e-6">µM</option><option value="1e-9">nM</option><option value="1e-12">pM</option></select></div></div>
+    <div class="field"><label>Mass concentration</label>
+      <div class="row"><input id="G" type="number" min="0" step="any">
+      <select id="Gu"><option value="1">g/L</option><option value="1">mg/mL</option><option value="1e-3">µg/mL</option><option value="1e-6">ng/mL</option></select></div></div>
+  </div>
+  <div id="msg1"></div>
+  <button id="reset" type="button">Reset</button>
+  <div class="note">Mass concentration = molarity × MW. For example, 10 mM of a 400 g/mol compound is 4 g/L (= 4 mg/mL).</div>
+</div>
+
+<div class="card">
+  <div class="section">Weigh-out: mass ↔ volume ↔ molarity</div>
+  <div class="grid">
+    <div class="field"><label>Mass</label>
+      <div class="row"><input id="A" type="number" min="0" step="any">
+      <select id="Au"><option value="1">g</option><option value="1e-3">mg</option><option value="1e-6">µg</option><option value="1e-9">ng</option></select></div></div>
+    <div class="field"><label>Volume of solvent</label>
+      <div class="row"><input id="Vv" type="number" min="0" step="any">
+      <select id="Vu"><option value="1">L</option><option value="1e-3">mL</option><option value="1e-6">µL</option></select></div></div>
+    <div class="field"><label>Resulting molarity</label>
+      <div class="row"><input id="W" type="number" min="0" step="any">
+      <select id="Wu"><option value="1">M</option><option value="1e-3">mM</option><option value="1e-6">µM</option><option value="1e-9">nM</option></select></div></div>
+  </div>
+  <div class="info" id="wsum">Uses the molecular weight above.</div>
+  <div id="msg2"></div>
+  <div class="note">Editing mass or volume updates the molarity. Editing the molarity updates the mass needed for the current volume. Use this to work out how much powder to weigh for a stock.</div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const num = x => +(+x).toPrecision(4);
+const st = {MW:400, M:0.01, A:null, Vv:0.001};  // SI: g/mol, mol/L, g, L
+st.A = st.M*st.MW*st.Vv;
+const ids = ["MW","M","G","A","Vv","W"];
+const units = {M:"Mu",G:"Gu",A:"Au",Vv:"Vu",W:"Wu"};
+const pick = (id, base) => {
+  // choose the unit that gives a readable number (1 <= x < 1000), else the largest unit
+  const sel = $(units[id]), opts = [...sel.options].map(o=>+o.value).filter((v,i,a)=>a.indexOf(v)===i).sort((a,b)=>b-a);
+  for(const u of opts){ const x = base/u; if(x>=1 && x<1000) return u; }
+  return base===0 ? opts[0] : (base/opts[0] >= 1000 ? opts[0] : opts[opts.length-1]);
+};
+function setField(id, base){
+  if(!isFinite(base)){ $(id).value=""; return; }
+  const u = pick(id, base);
+  // G has duplicate-value options (g/L = mg/mL): keep whichever is currently selected
+  if(id==="G"){ const cur=+$("Gu").value; if(base/cur>=1 && base/cur<1000) { $(id).value=num(base/cur); return; } }
+  $(units[id]).value = String(u); $(id).value = num(base/u);
+}
+function show(changed, err){
+  $("MW").value = st.MW ? num(st.MW) : "";
+  setField("M", st.M);
+  setField("G", st.M*st.MW);
+  setField("A", st.A);
+  setField("Vv", st.Vv);
+  setField("W", st.A/(st.MW*st.Vv));
+  ids.forEach(i=>$(i).classList.remove("upd"));
+  const grp1 = ["MW","M","G"], grp2 = ["A","Vv","W"];
+  const grp = grp1.includes(changed) ? grp1 : grp2.includes(changed) ? grp2 : [];
+  grp.forEach(i=>{ if(i!==changed) $(i).classList.add("upd"); });
+  if(changed==="MW") { $("G").classList.add("upd"); $("W").classList.add("upd"); }
+  $("msg1").innerHTML = err ? '<div class="warn">'+err+'</div>' : "";
+  $("wsum").textContent = "Weigh " + num($("A").value)+" "+$("Au").selectedOptions[0].text+" and dissolve in "+num($("Vv").value)+" "+$("Vu").selectedOptions[0].text+" for "+num($("W").value)+" "+$("Wu").selectedOptions[0].text+" (MW "+num(st.MW)+").";
+}
+function edited(id){
+  const v = parseFloat($(id).value);
+  if(!(v>=0) || !isFinite(v)){ show(null, "Enter a valid number (0 or higher); previous value restored."); return; }
+  const u = id==="MW" ? 1 : +$(units[id]).value, b = v*u;
+  if((id==="MW"||id==="Vv") && !(b>0)){ show(null, "This value must be greater than 0; previous value restored."); return; }
+  switch(id){
+    case "MW":
+      st.MW=b; st.A = st.M*st.MW*st.Vv; break;   // keep molarity, recompute mass
+    case "M": st.M=b; st.A = st.M*st.MW*st.Vv; break;
+    case "G": st.M=b/st.MW; st.A = st.M*st.MW*st.Vv; break;
+    case "A": st.A=b; st.M=b/(st.MW*st.Vv); break;
+    case "Vv": st.Vv=b; st.A = st.M*st.MW*st.Vv; break;
+    case "W": st.M=b; st.A = st.M*st.MW*st.Vv; break;
+  }
+  show(id);
+}
+ids.forEach(i=>$(i).addEventListener("change",()=>edited(i)));
+Object.keys(units).forEach(k=>$(units[k]).addEventListener("change",()=>{
+  // changing a unit re-reads the number as the same displayed value in the new unit
+  edited(k);
+}));
+$("reset").addEventListener("click",()=>{ Object.assign(st,{MW:400,M:0.01,Vv:0.001}); st.A=st.M*st.MW*st.Vv; show(null); });
+show(null);
+</script>
+</body>
+</html>
+
