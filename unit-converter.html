@@ -68,6 +68,25 @@
   <div class="note">Editing mass or volume updates the molarity. Editing the molarity updates the mass needed for the current volume. Use this to work out how much powder to weigh for a stock.</div>
 </div>
 
+<div class="card">
+  <div class="section">Solvent needed for a target concentration</div>
+  <div class="grid">
+    <div class="field"><label>Compound mass</label>
+      <div class="row"><input id="A2" type="number" min="0" step="any">
+      <select id="A2u"><option value="1">g</option><option value="1e-3">mg</option><option value="1e-6">µg</option></select></div></div>
+    <div class="field"><label>Target concentration</label>
+      <div class="row"><input id="C2" type="number" min="0" step="any">
+      <select id="C2u"><option value="1">M</option><option value="1e-3">mM</option><option value="1e-6">µM</option></select></div></div>
+    <div class="field"><label>Solvent to add</label>
+      <div class="row"><input id="V2" type="number" min="0" step="any">
+      <select id="V2u"><option value="1">L</option><option value="1e-3">mL</option><option value="1e-6">µL</option></select></div></div>
+    <div class="field"><label>Max known solubility (mM, optional)</label><input id="SOL" type="number" min="0" step="any"></div>
+  </div>
+  <div class="info" id="ssum"></div>
+  <div id="msg3"></div>
+  <div class="note">Solvent volume = mass ÷ (MW × concentration). Uses the molecular weight above. If you enter a known solubility limit, you get a warning when the target exceeds it. This assumes the compound fully dissolves and ignores volume change on dissolving.</div>
+</div>
+
 <script>
 const $ = id => document.getElementById(id);
 const num = x => +(+x).toPrecision(4);
@@ -126,7 +145,34 @@ Object.keys(units).forEach(k=>$(units[k]).addEventListener("change",()=>{
 }));
 $("reset").addEventListener("click",()=>{ Object.assign(st,{MW:400,M:0.01,Vv:0.001}); st.A=st.M*st.MW*st.Vv; show(null); });
 show(null);
+const s2 = {A:0.004, C:0.01};
+s2.V = s2.A/(st.MW*s2.C);
+const pk = (id, base) => { const o=[...$(id+"u").options].map(x=>+x.value).sort((a,b)=>b-a); for(const u of o){const x=base/u; if(x>=1&&x<1000) return u;} return o[o.length-1]; };
+function show2(changed, err){
+  s2.V = s2.A/(st.MW*s2.C);
+  [["A2",s2.A],["C2",s2.C],["V2",s2.V]].forEach(([id,b])=>{ const u=pk(id,b); $(id+"u").value=String(u); $(id).value=num(b/u); $(id).classList.remove("upd"); });
+  ["A2","C2","V2"].forEach(i=>{ if(i!==changed) $(i).classList.add("upd"); });
+  $("ssum").textContent = "Add "+num($("V2").value)+" "+$("V2u").selectedOptions[0].text+" solvent to "+num($("A2").value)+" "+$("A2u").selectedOptions[0].text+" for "+num($("C2").value)+" "+$("C2u").selectedOptions[0].text+" (MW "+num(st.MW)+").";
+  const sol=parseFloat($("SOL").value);
+  let m = err ? '<div class="warn">'+err+'</div>' : "";
+  if(sol>0 && s2.C*1000>sol) m += '<div class="warn">Target ('+num(s2.C*1000)+' mM) exceeds the known solubility ('+num(sol)+' mM). This mass needs at least '+num(s2.A/(st.MW*sol/1000)*1e6)+' µL of solvent to stay within it.</div>';
+  $("msg3").innerHTML = m;
+}
+function edited2(id){
+  const v=parseFloat($(id).value);
+  if(id==="SOL"){ show2(null); return; }
+  if(!(v>0) || !isFinite(v)){ show2(null,"Enter a number greater than 0; previous value restored."); return; }
+  const b=v*(+$(id+"u").value);
+  if(id==="A2") s2.A=b; else if(id==="C2") s2.C=b; else if(id==="V2") s2.C=s2.A/(st.MW*b);
+  show2(id);
+}
+["A2","C2","V2","SOL"].forEach(i=>$(i).addEventListener("change",()=>edited2(i)));
+["A2","C2","V2"].forEach(i=>$(i+"u").addEventListener("change",()=>edited2(i)));
+const _show=show; show=function(c,e){ _show(c,e); show2(null); };
+show2(null);
 </script>
 </body>
 </html>
+
+
 
