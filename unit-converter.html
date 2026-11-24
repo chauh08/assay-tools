@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -22,7 +22,7 @@
         font-family:inherit;color:var(--ink);background:#fff;transition:border-color .15s,box-shadow .15s,background .15s}
   input:focus,select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(37,99,235,.18)}
   input.upd{background:var(--accent-soft);border-color:#93b4f8}
-  .info{margin-top:16px;padding:10px 14px;border-radius:10px;background:var(--accent-soft);color:#1e40af;font-size:13px;min-height:38px}
+  .info{margin-top:16px;padding:10px 14px;border-radius:10px;background:var(--accent-soft);color:#1e40af;font-size:13px}
   .warn{margin-top:12px;padding:10px 14px;border-radius:10px;background:#fef2f2;color:#b91c1c;font-weight:600;font-size:13px}
   .note{font-size:12px;color:var(--muted);margin-top:16px;line-height:1.5}
   button{margin-top:16px;padding:9px 18px;border:1px solid #cbd5e1;border-radius:10px;background:#fff;
@@ -33,8 +33,7 @@
 <body>
 <div class="card">
   <h2>Unit Converter</h2>
-  <div class="sub">Type a value in <b>any</b> field, then press <b>Enter</b> or <b>Tab</b>. Linked fields recalculate and turn blue. Molecular weight is needed to convert between molar and mass units.</div>
-
+  <div class="sub">Type a value in <b>any</b> field, then press <b>Enter</b> or <b>Tab</b>. Linked fields recalculate and turn blue.</div>
   <div class="section">Molarity ↔ mass concentration</div>
   <div class="grid">
     <div class="field"><label>Molecular weight (g/mol)</label><input id="MW" type="number" min="0" step="any"></div>
@@ -43,136 +42,75 @@
       <select id="Mu"><option value="1">M</option><option value="1e-3">mM</option><option value="1e-6">µM</option><option value="1e-9">nM</option><option value="1e-12">pM</option></select></div></div>
     <div class="field"><label>Mass concentration</label>
       <div class="row"><input id="G" type="number" min="0" step="any">
-      <select id="Gu"><option value="1">g/L</option><option value="1">mg/mL</option><option value="1e-3">µg/mL</option><option value="1e-6">ng/mL</option></select></div></div>
+      <select id="Gu"><option value="1">mg/mL</option><option value="1e-3">µg/mL</option><option value="1e-6">ng/mL</option></select></div></div>
   </div>
   <div id="msg1"></div>
-  <button id="reset" type="button">Reset</button>
-  <div class="note">Mass concentration = molarity × MW. For example, 10 mM of a 400 g/mol compound is 4 g/L (= 4 mg/mL).</div>
+  <div class="note">Mass concentration = molarity × MW. For example, 10 mM of a 400 g/mol compound is 4 mg/mL.</div>
 </div>
 
 <div class="card">
-  <div class="section">Weigh-out: mass ↔ volume ↔ molarity</div>
-  <div class="grid">
-    <div class="field"><label>Mass</label>
-      <div class="row"><input id="A" type="number" min="0" step="any">
-      <select id="Au"><option value="1">g</option><option value="1e-3">mg</option><option value="1e-6">µg</option><option value="1e-9">ng</option></select></div></div>
-    <div class="field"><label>Volume of solvent</label>
-      <div class="row"><input id="Vv" type="number" min="0" step="any">
-      <select id="Vu"><option value="1">L</option><option value="1e-3">mL</option><option value="1e-6">µL</option></select></div></div>
-    <div class="field"><label>Resulting molarity</label>
-      <div class="row"><input id="W" type="number" min="0" step="any">
-      <select id="Wu"><option value="1">M</option><option value="1e-3">mM</option><option value="1e-6">µM</option><option value="1e-9">nM</option></select></div></div>
-  </div>
-  <div class="info" id="wsum">Uses the molecular weight above.</div>
-  <div id="msg2"></div>
-  <div class="note">Editing mass or volume updates the molarity. Editing the molarity updates the mass needed for the current volume. Use this to work out how much powder to weigh for a stock.</div>
-</div>
-
-<div class="card">
-  <div class="section">Solvent needed for a target concentration</div>
+  <div class="section">Make a stock: how much solvent to add</div>
   <div class="grid">
     <div class="field"><label>Compound mass</label>
-      <div class="row"><input id="A2" type="number" min="0" step="any">
-      <select id="A2u"><option value="1">g</option><option value="1e-3">mg</option><option value="1e-6">µg</option></select></div></div>
+      <div class="row"><input id="A" type="number" min="0" step="any">
+      <select id="Au"><option value="1">g</option><option value="1e-3">mg</option><option value="1e-6">µg</option></select></div></div>
     <div class="field"><label>Target concentration</label>
-      <div class="row"><input id="C2" type="number" min="0" step="any">
-      <select id="C2u"><option value="1">M</option><option value="1e-3">mM</option><option value="1e-6">µM</option></select></div></div>
+      <div class="row"><input id="C" type="number" min="0" step="any">
+      <select id="Cu"><option value="1">M</option><option value="1e-3">mM</option><option value="1e-6">µM</option></select></div></div>
     <div class="field"><label>Solvent to add</label>
-      <div class="row"><input id="V2" type="number" min="0" step="any">
-      <select id="V2u"><option value="1">L</option><option value="1e-3">mL</option><option value="1e-6">µL</option></select></div></div>
+      <div class="row"><input id="V" type="number" min="0" step="any">
+      <select id="Vu"><option value="1">L</option><option value="1e-3">mL</option><option value="1e-6">µL</option></select></div></div>
     <div class="field"><label>Max known solubility (mM, optional)</label><input id="SOL" type="number" min="0" step="any"></div>
   </div>
   <div class="info" id="ssum"></div>
-  <div id="msg3"></div>
-  <div class="note">Solvent volume = mass ÷ (MW × concentration). Uses the molecular weight above. If you enter a known solubility limit, you get a warning when the target exceeds it. This assumes the compound fully dissolves and ignores volume change on dissolving.</div>
+  <div id="msg2"></div>
+  <div class="note">Uses the molecular weight above. Solvent = mass ÷ (MW × concentration). Edit mass or concentration to get the solvent volume; edit the solvent volume to see the concentration you'd get. Assumes full dissolution and ignores volume change.</div>
 </div>
 
 <script>
 const $ = id => document.getElementById(id);
 const num = x => +(+x).toPrecision(4);
-const st = {MW:400, M:0.01, A:null, Vv:0.001};  // SI: g/mol, mol/L, g, L
-st.A = st.M*st.MW*st.Vv;
-const ids = ["MW","M","G","A","Vv","W"];
-const units = {M:"Mu",G:"Gu",A:"Au",Vv:"Vu",W:"Wu"};
-const pick = (id, base) => {
-  // choose the unit that gives a readable number (1 <= x < 1000), else the largest unit
-  const sel = $(units[id]), opts = [...sel.options].map(o=>+o.value).filter((v,i,a)=>a.indexOf(v)===i).sort((a,b)=>b-a);
-  for(const u of opts){ const x = base/u; if(x>=1 && x<1000) return u; }
-  return base===0 ? opts[0] : (base/opts[0] >= 1000 ? opts[0] : opts[opts.length-1]);
+const st = {MW:400, M:0.01, A:0.004, C:0.01};   // g/mol, mol/L, g, mol/L
+const pk = (id, base) => {
+  const o=[...$(id+"u").options].map(x=>+x.value).sort((a,b)=>b-a);
+  for(const u of o){ const x=base/u; if(x>=1&&x<1000) return u; }
+  return base/o[0]>=1000 ? o[0] : o[o.length-1];
 };
-function setField(id, base){
-  if(!isFinite(base)){ $(id).value=""; return; }
-  const u = pick(id, base);
-  // G has duplicate-value options (g/L = mg/mL): keep whichever is currently selected
-  if(id==="G"){ const cur=+$("Gu").value; if(base/cur>=1 && base/cur<1000) { $(id).value=num(base/cur); return; } }
-  $(units[id]).value = String(u); $(id).value = num(base/u);
-}
+function put(id, base){ const u=pk(id,base); $(id+"u").value=String(u); $(id).value=num(base/u); }
+function mark(ids, changed){ ids.forEach(i=>$(i).classList.toggle("upd", i!==changed && changed!=null)); }
+
 function show(changed, err){
-  $("MW").value = st.MW ? num(st.MW) : "";
-  setField("M", st.M);
-  setField("G", st.M*st.MW);
-  setField("A", st.A);
-  setField("Vv", st.Vv);
-  setField("W", st.A/(st.MW*st.Vv));
-  ids.forEach(i=>$(i).classList.remove("upd"));
-  const grp1 = ["MW","M","G"], grp2 = ["A","Vv","W"];
-  const grp = grp1.includes(changed) ? grp1 : grp2.includes(changed) ? grp2 : [];
-  grp.forEach(i=>{ if(i!==changed) $(i).classList.add("upd"); });
-  if(changed==="MW") { $("G").classList.add("upd"); $("W").classList.add("upd"); }
+  $("MW").value = num(st.MW);
+  put("M", st.M); put("G", st.M*st.MW);
+  put("A", st.A); put("C", st.C); put("V", st.A/(st.MW*st.C));
+  const top = ["MW","M","G"], bot = ["A","C","V"];
+  mark(top, top.includes(changed)?changed:null); mark(bot, bot.includes(changed)?changed:null);
+  if(changed==="MW"){ $("G").classList.add("upd"); bot.forEach(i=>{ if(i==="V") $(i).classList.add("upd"); }); }
   $("msg1").innerHTML = err ? '<div class="warn">'+err+'</div>' : "";
-  $("wsum").textContent = "Weigh " + num($("A").value)+" "+$("Au").selectedOptions[0].text+" and dissolve in "+num($("Vv").value)+" "+$("Vu").selectedOptions[0].text+" for "+num($("W").value)+" "+$("Wu").selectedOptions[0].text+" (MW "+num(st.MW)+").";
+  $("ssum").textContent = "Add "+$("V").value+" "+$("Vu").selectedOptions[0].text+" solvent to "+$("A").value+" "+$("Au").selectedOptions[0].text+" for "+$("C").value+" "+$("Cu").selectedOptions[0].text+" (MW "+num(st.MW)+").";
+  const sol=parseFloat($("SOL").value);
+  $("msg2").innerHTML = sol>0 && st.C*1000>sol
+    ? '<div class="warn">Target ('+num(st.C*1000)+' mM) exceeds the known solubility ('+num(sol)+' mM). This mass needs at least '+num(st.A/(st.MW*sol/1000)*1e6)+' µL of solvent to stay within it.</div>' : "";
 }
 function edited(id){
-  const v = parseFloat($(id).value);
-  if(!(v>=0) || !isFinite(v)){ show(null, "Enter a valid number (0 or higher); previous value restored."); return; }
-  const u = id==="MW" ? 1 : +$(units[id]).value, b = v*u;
-  if((id==="MW"||id==="Vv") && !(b>0)){ show(null, "This value must be greater than 0; previous value restored."); return; }
+  if(id==="SOL"){ show(null); return; }
+  const v=parseFloat($(id).value);
+  if(!(v>=0) || !isFinite(v)){ show(null,"Enter a valid number; previous value restored."); return; }
+  if(["MW","A","C","V"].includes(id) && !(v>0)){ show(null,"This value must be greater than 0; previous value restored."); return; }
+  const b = id==="MW" ? v : v*(+$(id+"u").value);
   switch(id){
-    case "MW":
-      st.MW=b; st.A = st.M*st.MW*st.Vv; break;   // keep molarity, recompute mass
-    case "M": st.M=b; st.A = st.M*st.MW*st.Vv; break;
-    case "G": st.M=b/st.MW; st.A = st.M*st.MW*st.Vv; break;
-    case "A": st.A=b; st.M=b/(st.MW*st.Vv); break;
-    case "Vv": st.Vv=b; st.A = st.M*st.MW*st.Vv; break;
-    case "W": st.M=b; st.A = st.M*st.MW*st.Vv; break;
+    case "MW": st.MW=b; break;
+    case "M": st.M=b; break;
+    case "G": st.M=b/st.MW; break;
+    case "A": st.A=b; break;
+    case "C": st.C=b; break;
+    case "V": st.C=st.A/(st.MW*b); break;
   }
   show(id);
 }
-ids.forEach(i=>$(i).addEventListener("change",()=>edited(i)));
-Object.keys(units).forEach(k=>$(units[k]).addEventListener("change",()=>{
-  // changing a unit re-reads the number as the same displayed value in the new unit
-  edited(k);
-}));
-$("reset").addEventListener("click",()=>{ Object.assign(st,{MW:400,M:0.01,Vv:0.001}); st.A=st.M*st.MW*st.Vv; show(null); });
+["MW","M","G","A","C","V","SOL"].forEach(i=>$(i).addEventListener("change",()=>edited(i)));
+["M","G","A","C","V"].forEach(i=>$(i+"u").addEventListener("change",()=>edited(i)));
 show(null);
-const s2 = {A:0.004, C:0.01};
-s2.V = s2.A/(st.MW*s2.C);
-const pk = (id, base) => { const o=[...$(id+"u").options].map(x=>+x.value).sort((a,b)=>b-a); for(const u of o){const x=base/u; if(x>=1&&x<1000) return u;} return o[o.length-1]; };
-function show2(changed, err){
-  s2.V = s2.A/(st.MW*s2.C);
-  [["A2",s2.A],["C2",s2.C],["V2",s2.V]].forEach(([id,b])=>{ const u=pk(id,b); $(id+"u").value=String(u); $(id).value=num(b/u); $(id).classList.remove("upd"); });
-  ["A2","C2","V2"].forEach(i=>{ if(i!==changed) $(i).classList.add("upd"); });
-  $("ssum").textContent = "Add "+num($("V2").value)+" "+$("V2u").selectedOptions[0].text+" solvent to "+num($("A2").value)+" "+$("A2u").selectedOptions[0].text+" for "+num($("C2").value)+" "+$("C2u").selectedOptions[0].text+" (MW "+num(st.MW)+").";
-  const sol=parseFloat($("SOL").value);
-  let m = err ? '<div class="warn">'+err+'</div>' : "";
-  if(sol>0 && s2.C*1000>sol) m += '<div class="warn">Target ('+num(s2.C*1000)+' mM) exceeds the known solubility ('+num(sol)+' mM). This mass needs at least '+num(s2.A/(st.MW*sol/1000)*1e6)+' µL of solvent to stay within it.</div>';
-  $("msg3").innerHTML = m;
-}
-function edited2(id){
-  const v=parseFloat($(id).value);
-  if(id==="SOL"){ show2(null); return; }
-  if(!(v>0) || !isFinite(v)){ show2(null,"Enter a number greater than 0; previous value restored."); return; }
-  const b=v*(+$(id+"u").value);
-  if(id==="A2") s2.A=b; else if(id==="C2") s2.C=b; else if(id==="V2") s2.C=s2.A/(st.MW*b);
-  show2(id);
-}
-["A2","C2","V2","SOL"].forEach(i=>$(i).addEventListener("change",()=>edited2(i)));
-["A2","C2","V2"].forEach(i=>$(i+"u").addEventListener("change",()=>edited2(i)));
-const _show=show; show=function(c,e){ _show(c,e); show2(null); };
-show2(null);
 </script>
 </body>
 </html>
-
-
-
