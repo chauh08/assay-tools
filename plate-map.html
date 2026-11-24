@@ -226,21 +226,42 @@ function ingestText(name, text) {
   return kind + " · " + info;
 }
 
-function addChip(text, err) {
+var loaded = [], nextId = 1;
+
+function addChip(text, err, id) {
   var c = document.createElement("span");
   c.className = "chip" + (err ? " err" : "");
-  c.textContent = text;
+  c.appendChild(document.createTextNode(text + " "));
+  var x = document.createElement("a");
+  x.textContent = "✕"; x.title = "Remove this file";
+  x.style.cssText = "cursor:pointer;font-weight:700;margin-left:4px;";
+  x.onclick = function () { loaded = loaded.filter(function (f) { return f.id !== id; }); rebuild(); };
+  c.appendChild(x);
   $("chips").appendChild(c);
+}
+
+function rebuild() {
+  plates = {};
+  $("chips").innerHTML = "";
+  loaded.forEach(function (f) {
+    try { addChip(f.name + " — " + ingestText(f.name, f.text), false, f.id); }
+    catch (e) { addChip(f.name + " — " + e.message + (/\.xlsx$/i.test(f.name) ? " (save as .xls XML or CSV)" : ""), true, f.id); }
+  });
+  if (loaded.length > 1) {
+    var b = document.createElement("a");
+    b.textContent = "Remove all";
+    b.style.cssText = "cursor:pointer;font-size:12px;color:#991b1b;align-self:center;";
+    b.onclick = function () { loaded = []; rebuild(); };
+    $("chips").appendChild(b);
+  }
+  refreshPlates();
 }
 
 function loadFiles(list) {
   var files = Array.prototype.slice.call(list);
   Promise.all(files.map(function (f) {
-    return f.text().then(function (t) {
-      try { addChip(f.name + " — " + ingestText(f.name, t)); }
-      catch (e) { addChip(f.name + " — " + e.message + (/\.xlsx$/i.test(f.name) ? " (save as .xls XML or CSV)" : ""), true); }
-    });
-  })).then(refreshPlates);
+    return f.text().then(function (t) { loaded.push({ id: nextId++, name: f.name, text: t }); });
+  })).then(rebuild);
 }
 
 function lookupMos(bc, well) { var p = plates[bc]; return p && p.mos[well] ? p.mos[well] : null; }
