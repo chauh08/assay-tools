@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Concentration Converter</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 16px; font-family: "Segoe UI", system-ui, sans-serif; background: #f3f5f9; color: #1f2937; }
+  .card { max-width: 640px; margin: 0 auto; background: #fff; border-radius: 14px; padding: 24px; box-shadow: 0 2px 12px rgba(0,0,0,.08); }
+  h2 { margin: 0 0 4px; font-size: 22px; }
+  .sub { color: #6b7280; font-size: 14px; margin-bottom: 20px; }
+  label { display: block; font-weight: 600; font-size: 14px; margin-bottom: 6px; }
+  .row { display: flex; gap: 8px; margin-bottom: 16px; }
+  input, select { font: inherit; padding: 10px 12px; border: 1.5px solid #d1d5db; border-radius: 8px; background: #fff; }
+  input:focus, select:focus { outline: none; border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,.15); }
+  input { flex: 1; min-width: 0; }
+  input.bad { border-color: #dc2626; }
+  .hint { font-size: 13px; color: #6b7280; margin: -10px 0 16px; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 8px; }
+  .res { background: #eff6ff; border-radius: 10px; padding: 12px 14px; cursor: pointer; border: 1.5px solid transparent; }
+  .res:hover { border-color: #2563eb; }
+  .res.dim { background: #f3f4f6; color: #9ca3af; cursor: default; }
+  .res .u { font-size: 12px; color: #6b7280; }
+  .res .v { font-size: 18px; font-weight: 700; color: #1d4ed8; word-break: break-all; }
+  .res.dim .v { color: #9ca3af; font-size: 14px; font-weight: 500; }
+  h3 { font-size: 14px; margin: 18px 0 0; color: #374151; }
+  .note { font-size: 12px; color: #6b7280; margin-top: 14px; }
+  @media (max-width: 480px) { .grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="card">
+  <h2>Concentration Converter</h2>
+  <div class="sub">Type a concentration and pick its unit. Every other unit is shown below.</div>
+
+  <label for="val">Concentration</label>
+  <div class="row">
+    <input id="val" type="text" inputmode="decimal" placeholder="e.g. 10" autocomplete="off">
+    <select id="unit"></select>
+  </div>
+
+  <label for="mw">Molecular weight (g/mol) <span style="font-weight:400;color:#6b7280">— only needed to convert between molar and mass units</span></label>
+  <div class="row">
+    <input id="mw" type="text" inputmode="decimal" placeholder="e.g. 400" autocomplete="off">
+  </div>
+  <div class="hint" id="hint"></div>
+
+  <h3>Molar</h3>
+  <div class="grid" id="molar"></div>
+  <h3>Mass per volume</h3>
+  <div class="grid" id="mass"></div>
+  <div class="note">Click any result to copy it. 1 mg/mL = 1 g/L = 1 µg/µL.</div>
+</div>
+
+<script>
+var UNITS = [
+  { id: "M",  label: "M",        kind: "molar", f: 1 },
+  { id: "mM", label: "mM",       kind: "molar", f: 1e-3 },
+  { id: "uM", label: "µM",       kind: "molar", f: 1e-6 },
+  { id: "nM", label: "nM",       kind: "molar", f: 1e-9 },
+  { id: "pM", label: "pM",       kind: "molar", f: 1e-12 },
+  { id: "gL", label: "mg/mL",    kind: "mass",  f: 1 },
+  { id: "ugmL", label: "µg/mL",  kind: "mass",  f: 1e-3 },
+  { id: "ngmL", label: "ng/mL",  kind: "mass",  f: 1e-6 },
+  { id: "pct", label: "% (w/v)", kind: "mass",  f: 10 }
+];
+
+var valEl = document.getElementById("val");
+var unitEl = document.getElementById("unit");
+var mwEl = document.getElementById("mw");
+var hintEl = document.getElementById("hint");
+
+UNITS.forEach(function (u) {
+  var o = document.createElement("option");
+  o.value = u.id; o.textContent = u.label;
+  if (u.id === "mM") o.selected = true;
+  unitEl.appendChild(o);
+});
+
+function num(el) {
+  var s = el.value.replace(/,/g, "").trim();
+  if (s === "") return null;
+  var n = Number(s);
+  return isFinite(n) ? n : NaN;
+}
+
+function fmt(x) {
+  if (x === 0) return "0";
+  var a = Math.abs(x);
+  if (a >= 1e6 || a < 1e-3) return x.toExponential(3).replace("e+", "e");
+  return String(parseFloat(x.toPrecision(5)));
+}
+
+function byId(id) { return UNITS.filter(function (u) { return u.id === id; })[0]; }
+
+function render() {
+  var v = num(valEl), mw = num(mwEl);
+  var src = byId(unitEl.value);
+  valEl.classList.toggle("bad", v !== null && (isNaN(v) || v < 0));
+  mwEl.classList.toggle("bad", mw !== null && (isNaN(mw) || mw <= 0));
+  var okV = v !== null && !isNaN(v) && v >= 0;
+  var okMW = mw !== null && !isNaN(mw) && mw > 0;
+
+  // base values: mol/L and g/L
+  var molL = null, gL = null;
+  if (okV) {
+    var base = v * src.f;
+    if (src.kind === "molar") { molL = base; if (okMW) gL = base * mw; }
+    else { gL = base; if (okMW) molL = base / mw; }
+  }
+
+  hintEl.textContent = "";
+  if (!okV) hintEl.textContent = v === null ? "Enter a concentration above." : "Enter a valid positive number.";
+  else if (!okMW) hintEl.textContent = "Enter a molecular weight to see " + (src.kind === "molar" ? "mass" : "molar") + " units.";
+
+  ["molar", "mass"].forEach(function (kind) {
+    var box = document.getElementById(kind);
+    box.innerHTML = "";
+    UNITS.filter(function (u) { return u.kind === kind; }).forEach(function (u) {
+      var b = kind === "molar" ? molL : gL;
+      var d = document.createElement("div");
+      var text = b === null ? "—" : fmt(b / u.f);
+      d.className = "res" + (b === null ? " dim" : "");
+      d.innerHTML = '<div class="u"></div><div class="v"></div>';
+      d.children[0].textContent = u.label;
+      d.children[1].textContent = text;
+      if (b !== null) d.onclick = function () {
+        if (navigator.clipboard) navigator.clipboard.writeText(text);
+        d.children[0].textContent = u.label + " — copied";
+        setTimeout(function () { d.children[0].textContent = u.label; }, 900);
+      };
+      box.appendChild(d);
+    });
+  });
+}
+
+valEl.addEventListener("input", render);
+mwEl.addEventListener("input", render);
+unitEl.addEventListener("change", render);
+render();
+</script>
+</body>
+</html>
