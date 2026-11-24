@@ -499,13 +499,15 @@ function listColumns(v, o) {
 
 function sortedItems(v) { return v.items.slice().sort(function (a, b) { return a.pos.r - b.pos.r || a.pos.c - b.pos.c; }); }
 
-function destBarcodes() {
-  return Object.keys(plates).filter(function (bc) { return Object.keys(plates[bc].dest).length > 0; }).sort();
+function destBarcodes(views) {
+  var seen = {};
+  views.forEach(function (v) { if (v.role === "dest") seen[v.bc] = 1; });
+  return Object.keys(seen).sort();
 }
 
 function csvText(views, o) {
   function q(v) { v = v == null ? "" : String(v); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; }
-  var lines = ["Destination plate barcode"].concat(destBarcodes().map(q), [""]), heads = [];
+  var lines = ["Destination plate barcode"].concat(destBarcodes(views).map(q), [""]), heads = [];
   views.forEach(function (v) {
     var cols = listColumns(v, o), key = cols.map(function (c) { return c.h; }).join("|");
     if (heads.indexOf(key) < 0) { heads.push(key); if (lines.length) lines.push(""); lines.push(["Plate", "View"].concat(cols.map(function (c) { return c.h; })).map(q).join(",")); }
@@ -541,7 +543,7 @@ function workbookXml(views, o) {
   function S(val, st) { return '<Cell' + (st ? ' ss:StyleID="' + st + '"' : "") + '><Data ss:Type="String">' + x(val) + "</Data></Cell>"; }
   function N(val, st) { return '<Cell' + (st ? ' ss:StyleID="' + st + '"' : "") + '><Data ss:Type="Number">' + val + "</Data></Cell>"; }
 
-  var dbs = destBarcodes();
+  var dbs = destBarcodes(views);
   sheets += '<Worksheet ss:Name="Destination Plates"><Table><Column ss:Width="190"/><Row ss:Height="20">' + S("Destination plate barcode", "hdr") + "</Row>" +
     dbs.map(function (b) { return "<Row>" + S(b) + "</Row>"; }).join("") + "</Table></Worksheet>";
 
@@ -600,7 +602,7 @@ function exportPNG(v) {
   g.fillText(v.title, 10, 16);
   g.font = "12px Segoe UI, Arial"; g.fillStyle = "#4b5563";
   g.fillText("Color by " + $("metric").options[$("metric").selectedIndex].text + ": " + v.legendText.replace(/\s+/g, " ").slice(0, 160), 10, 36);
-  g.fillText("Destination plates: " + fitText(destBarcodes().join(", "), W - 20), 10, 56);
+  g.fillText("Destination plates: " + fitText(destBarcodes([v]).join(", "), W - 20), 10, 56);
   g.font = "bold 12px Segoe UI, Arial"; g.textAlign = "center"; g.fillStyle = "#6b7280";
   var r, c;
   for (c = 0; c < v.cols; c++) g.fillText(c + 1, hd + c * cw + cw / 2, top + hd / 2);
