@@ -2,115 +2,118 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Unit Converter</title>
+<title>Stock Solution Calculator</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
   :root{--accent:#2563eb;--accent-soft:#eff4ff;--ink:#0f172a;--muted:#64748b;--line:#e2e8f0}
   *{box-sizing:border-box}
   body{font-family:"Segoe UI Variable","Segoe UI",system-ui,sans-serif;margin:0;padding:24px;color:var(--ink);
        background:linear-gradient(135deg,#f1f5f9,#e8eefc);min-height:100vh}
-  .card{background:#fff;border-radius:16px;padding:28px;max-width:680px;margin:0 auto 20px;
+  .card{background:#fff;border-radius:16px;padding:28px;max-width:640px;margin:0 auto;
         box-shadow:0 10px 30px rgba(15,23,42,.08),0 2px 6px rgba(15,23,42,.05)}
   h2{margin:0 0 4px;font-size:22px;font-weight:700;letter-spacing:-.01em}
-  .sub{font-size:13px;color:var(--muted);margin-bottom:22px;line-height:1.4}
-  .section{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:0 0 10px}
-  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px}
-  .field label{display:block;font-size:12px;font-weight:600;color:#334155;margin-bottom:6px}
+  .sub{font-size:13px;color:var(--muted);margin-bottom:24px}
+  .step{display:flex;gap:14px;align-items:flex-start;margin-bottom:20px}
+  .num{flex:none;width:28px;height:28px;border-radius:50%;background:var(--accent);color:#fff;font-weight:700;font-size:14px;
+       display:flex;align-items:center;justify-content:center;margin-top:2px}
+  .body{flex:1}
+  .q{font-size:15px;font-weight:600;margin-bottom:8px}
+  .hint{font-size:12px;color:var(--muted);margin-top:6px}
   .row{display:flex;gap:8px}
-  .row select{width:96px;flex:none}
-  input,select{width:100%;padding:10px 12px;border:1px solid #cbd5e1;border-radius:10px;font-size:15px;
-        font-family:inherit;color:var(--ink);background:#fff;transition:border-color .15s,box-shadow .15s,background .15s}
+  .row select{width:92px;flex:none}
+  input,select{width:100%;padding:11px 12px;border:1px solid #cbd5e1;border-radius:10px;font-size:16px;
+        font-family:inherit;color:var(--ink);background:#fff;transition:border-color .15s,box-shadow .15s}
   input:focus,select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(37,99,235,.18)}
-  input.upd{background:var(--accent-soft);border-color:#93b4f8}
-  .info{margin-top:16px;padding:10px 14px;border-radius:10px;background:var(--accent-soft);color:#1e40af;font-size:13px}
+  input.bad{border-color:#dc2626}
+  .result{margin-top:8px;padding:22px;border-radius:14px;background:linear-gradient(135deg,#2563eb,#4f46e5);color:#fff;text-align:center}
+  .result .lbl{font-size:13px;opacity:.85}
+  .result .big{font-size:38px;font-weight:700;margin:6px 0;letter-spacing:-.02em}
+  .result .det{font-size:13px;opacity:.9;line-height:1.5}
+  .result.idle{background:#f1f5f9;color:var(--muted)}
+  .result.idle .big{font-size:18px;font-weight:600}
   .warn{margin-top:12px;padding:10px 14px;border-radius:10px;background:#fef2f2;color:#b91c1c;font-weight:600;font-size:13px}
-  .note{font-size:12px;color:var(--muted);margin-top:16px;line-height:1.5}
-  button{margin-top:16px;padding:9px 18px;border:1px solid #cbd5e1;border-radius:10px;background:#fff;
-         font-family:inherit;font-weight:600;font-size:13px;cursor:pointer}
-  button:hover{background:#f1f5f9}
+  .actions{display:flex;gap:10px;margin-top:4px}
+  button{padding:11px 22px;border:0;border-radius:10px;font-family:inherit;font-weight:600;font-size:14px;cursor:pointer}
+  #go{background:var(--accent);color:#fff}
+  #go:hover{background:#1d4ed8}
+  #clear{background:#fff;border:1px solid #cbd5e1;color:var(--ink)}
+  #clear:hover{background:#f1f5f9}
+  details{margin-top:22px;font-size:13px;color:var(--muted)}
+  summary{cursor:pointer;font-weight:600}
 </style>
 </head>
 <body>
 <div class="card">
-  <h2>Unit Converter</h2>
-  <div class="sub">Type a value in <b>any</b> field, then press <b>Enter</b> or <b>Tab</b>. Linked fields recalculate and turn blue.</div>
-  <div class="section">Molarity ↔ mass concentration</div>
-  <div class="grid">
-    <div class="field"><label>Molecular weight (g/mol)</label><input id="MW" type="number" min="0" step="any"></div>
-    <div class="field"><label>Molar concentration</label>
-      <div class="row"><input id="M" type="number" min="0" step="any">
-      <select id="Mu"><option value="1">M</option><option value="1e-3">mM</option><option value="1e-6">µM</option><option value="1e-9">nM</option><option value="1e-12">pM</option></select></div></div>
-    <div class="field"><label>Mass concentration</label>
-      <div class="row"><input id="G" type="number" min="0" step="any">
-      <select id="Gu"><option value="1">mg/mL</option><option value="1e-3">µg/mL</option><option value="1e-6">ng/mL</option></select></div></div>
-  </div>
-  <div id="msg1"></div>
-  <div class="note">Mass concentration = molarity × MW. For example, 10 mM of a 400 g/mol compound is 4 mg/mL.</div>
-</div>
+  <h2>Stock Solution Calculator</h2>
+  <div class="sub">Answer the three questions below. The result updates as you type.</div>
 
-<div class="card">
-  <div class="section">Make a stock: how much solvent to add</div>
-  <div class="grid">
-    <div class="field"><label>Compound mass</label>
-      <div class="row"><input id="A" type="number" min="0" step="any">
-      <select id="Au"><option value="1">g</option><option value="1e-3">mg</option><option value="1e-6">µg</option></select></div></div>
-    <div class="field"><label>Target concentration</label>
-      <div class="row"><input id="C" type="number" min="0" step="any">
-      <select id="Cu"><option value="1">M</option><option value="1e-3">mM</option><option value="1e-6">µM</option></select></div></div>
-    <div class="field"><label>Solvent to add</label>
-      <div class="row"><input id="V" type="number" min="0" step="any">
-      <select id="Vu"><option value="1">L</option><option value="1e-3">mL</option><option value="1e-6">µL</option></select></div></div>
-    <div class="field"><label>Max known solubility (mM, optional)</label><input id="SOL" type="number" min="0" step="any"></div>
-  </div>
-  <div class="info" id="ssum"></div>
-  <div id="msg2"></div>
-  <div class="note">Uses the molecular weight above. Solvent = mass ÷ (MW × concentration). Edit mass or concentration to get the solvent volume; edit the solvent volume to see the concentration you'd get. Assumes full dissolution and ignores volume change.</div>
+  <div class="step"><div class="num">1</div><div class="body">
+    <div class="q">How much compound do you have?</div>
+    <div class="row"><input id="A" type="number" min="0" step="any" placeholder="e.g. 4">
+      <select id="Au"><option value="1e-3" selected>mg</option><option value="1e-6">µg</option><option value="1">g</option></select></div>
+  </div></div>
+
+  <div class="step"><div class="num">2</div><div class="body">
+    <div class="q">What is its molecular weight?</div>
+    <input id="MW" type="number" min="0" step="any" placeholder="e.g. 400">
+    <div class="hint">In g/mol. Found on the vial label or datasheet.</div>
+  </div></div>
+
+  <div class="step"><div class="num">3</div><div class="body">
+    <div class="q">What concentration do you want?</div>
+    <div class="row"><input id="C" type="number" min="0" step="any" placeholder="e.g. 10">
+      <select id="Cu"><option value="1e-3" selected>mM</option><option value="1e-6">µM</option><option value="1">M</option></select></div>
+  </div></div>
+
+  <div class="actions"><button id="go" type="button">Calculate</button><button id="clear" type="button">Clear</button></div>
+
+  <div id="out" style="margin-top:22px"></div>
+
+  <details>
+    <summary>Optional: check against solubility</summary>
+    <div style="margin-top:10px" class="row">
+      <input id="SOL" type="number" min="0" step="any" placeholder="Max known solubility">
+      <select id="SOLu"><option value="1e-3" selected>mM</option><option value="1e-6">µM</option></select>
+    </div>
+    <div class="hint">You'll get a warning if the target is above this.</div>
+  </details>
+  <details>
+    <summary>How it's calculated</summary>
+    <p>Solvent volume = mass ÷ (molecular weight × concentration). Assumes the compound dissolves fully and ignores volume change.</p>
+  </details>
 </div>
 
 <script>
 const $ = id => document.getElementById(id);
 const num = x => +(+x).toPrecision(4);
-const st = {MW:400, M:0.01, A:0.004, C:0.01};   // g/mol, mol/L, g, mol/L
-const pk = (id, base) => {
-  const o=[...$(id+"u").options].map(x=>+x.value).sort((a,b)=>b-a);
-  for(const u of o){ const x=base/u; if(x>=1&&x<1000) return u; }
-  return base/o[0]>=1000 ? o[0] : o[o.length-1];
-};
-function put(id, base){ const u=pk(id,base); $(id+"u").value=String(u); $(id).value=num(base/u); }
-function mark(ids, changed){ ids.forEach(i=>$(i).classList.toggle("upd", i!==changed && changed!=null)); }
+function vol(L){
+  if(L>=1) return num(L)+" L";
+  if(L>=1e-3) return num(L*1e3)+" mL";
+  return num(L*1e6)+" µL";
+}
+function conc(M){ return M>=1 ? num(M)+" M" : M>=1e-3 ? num(M*1e3)+" mM" : num(M*1e6)+" µM"; }
+function idle(msg){ $("out").innerHTML='<div class="result idle"><div class="big">'+msg+'</div></div>'; }
 
-function show(changed, err){
-  $("MW").value = num(st.MW);
-  put("M", st.M); put("G", st.M*st.MW);
-  put("A", st.A); put("C", st.C); put("V", st.A/(st.MW*st.C));
-  const top = ["MW","M","G"], bot = ["A","C","V"];
-  mark(top, top.includes(changed)?changed:null); mark(bot, bot.includes(changed)?changed:null);
-  if(changed==="MW"){ $("G").classList.add("upd"); bot.forEach(i=>{ if(i==="V") $(i).classList.add("upd"); }); }
-  $("msg1").innerHTML = err ? '<div class="warn">'+err+'</div>' : "";
-  $("ssum").textContent = "Add "+$("V").value+" "+$("Vu").selectedOptions[0].text+" solvent to "+$("A").value+" "+$("Au").selectedOptions[0].text+" for "+$("C").value+" "+$("Cu").selectedOptions[0].text+" (MW "+num(st.MW)+").";
-  const sol=parseFloat($("SOL").value);
-  $("msg2").innerHTML = sol>0 && st.C*1000>sol
-    ? '<div class="warn">Target ('+num(st.C*1000)+' mM) exceeds the known solubility ('+num(sol)+' mM). This mass needs at least '+num(st.A/(st.MW*sol/1000)*1e6)+' µL of solvent to stay within it.</div>' : "";
+function calc(){
+  const A=parseFloat($("A").value)*+$("Au").value, MW=parseFloat($("MW").value), C=parseFloat($("C").value)*+$("Cu").value;
+  const f=[["A",A],["MW",MW],["C",C]];
+  f.forEach(([id,v])=>$(id).classList.toggle("bad", $(id).value!=="" && !(v>0)));
+  if([$("A").value,$("MW").value,$("C").value].some(x=>x==="")){ idle("Fill in all three answers to see the result"); return; }
+  if(f.some(([,v])=>!(v>0))){ idle("Enter numbers greater than 0"); return; }
+  const V=A/(MW*C);
+  const mgml = C*MW; // g/L = mg/mL
+  let h='<div class="result"><div class="lbl">Add this much solvent (e.g. DMSO)</div><div class="big">'+vol(V)+'</div>'+
+        '<div class="det">to '+num($("A").value)+" "+$("Au").selectedOptions[0].text+' of compound (MW '+num(MW)+')<br>to make '+conc(C)+' ('+num(mgml)+' mg/mL)</div></div>';
+  const sol=parseFloat($("SOL").value)*+$("SOLu").value;
+  if(sol>0 && C>sol+1e-15) h+='<div class="warn">Target ('+conc(C)+') is above the known solubility ('+conc(sol)+'). Use at least '+vol(A/(MW*sol))+' of solvent to stay within it, or lower the target.</div>';
+  $("out").innerHTML=h;
 }
-function edited(id){
-  if(id==="SOL"){ show(null); return; }
-  const v=parseFloat($(id).value);
-  if(!(v>=0) || !isFinite(v)){ show(null,"Enter a valid number; previous value restored."); return; }
-  if(["MW","A","C","V"].includes(id) && !(v>0)){ show(null,"This value must be greater than 0; previous value restored."); return; }
-  const b = id==="MW" ? v : v*(+$(id+"u").value);
-  switch(id){
-    case "MW": st.MW=b; break;
-    case "M": st.M=b; break;
-    case "G": st.M=b/st.MW; break;
-    case "A": st.A=b; break;
-    case "C": st.C=b; break;
-    case "V": st.C=st.A/(st.MW*b); break;
-  }
-  show(id);
-}
-["MW","M","G","A","C","V","SOL"].forEach(i=>$(i).addEventListener("change",()=>edited(i)));
-["M","G","A","C","V"].forEach(i=>$(i+"u").addEventListener("change",()=>edited(i)));
-show(null);
+["A","MW","C","SOL"].forEach(i=>$(i).addEventListener("input",calc));
+["Au","Cu","SOLu"].forEach(i=>$(i).addEventListener("change",calc));
+document.addEventListener("keydown",e=>{ if(e.key==="Enter") calc(); });
+$("go").addEventListener("click",calc);
+$("clear").addEventListener("click",()=>{ ["A","MW","C","SOL"].forEach(i=>{$(i).value="";$(i).classList.remove("bad");}); calc(); $("A").focus(); });
+calc();
 </script>
 </body>
 </html>
