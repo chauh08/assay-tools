@@ -43,6 +43,11 @@
   #tip b { color: #93c5fd; }
   .note { font-size: 12px; color: #6b7280; }
   #empty { color: #6b7280; padding: 30px; text-align: center; }
+  #expPanel { margin-top: 10px; padding: 14px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 10px; }
+  .exp-grp { margin-bottom: 12px; font-size: 13px; }
+  .exp-grp label { display: block; font-weight: 400; margin: 3px 0 0 4px; }
+  .exp-grp a { color: #2563eb; cursor: pointer; font-size: 12px; }
+  #expViews { max-height: 150px; overflow: auto; }
 </style>
 </head>
 <body>
@@ -72,7 +77,24 @@
       <label><input type="checkbox" id="sBatch" checked> Batch</label>
     </div>
   </div>
-  <div style="margin-top:12px"><button id="expPng">Export image (PNG)</button> <button id="expXls">Export Excel</button> <button id="expCsv">CSV</button></div>
+  <div style="margin-top:12px"><button id="expToggle">Export…</button></div>
+  <div id="expPanel" style="display:none">
+    <div class="exp-grp"><b>1. Plates / views</b> <a id="expAll">all</a> · <a id="expNone">none</a><div id="expViews"></div></div>
+    <div class="exp-grp"><b>2. Format</b>
+      <label><input type="radio" name="expFmt" value="xls" checked> Excel workbook (.xls)</label>
+      <label><input type="radio" name="expFmt" value="csv"> CSV (well list)</label>
+      <label><input type="radio" name="expFmt" value="png"> PNG image (one per view)</label></div>
+    <div class="exp-grp" id="expSheets"><b>3. Excel sheets</b>
+      <label><input type="checkbox" id="eMap" checked> Plate map layout (coloured grid)</label>
+      <label><input type="checkbox" id="eList" checked> Well list (table)</label></div>
+    <div class="exp-grp" id="expCols"><b>4. Columns in well list</b>
+      <label><input type="checkbox" id="fVol" checked> Volume</label>
+      <label><input type="checkbox" id="fConc" checked> Concentration</label>
+      <label><input type="checkbox" id="fId" checked> Sample ID / compound</label>
+      <label><input type="checkbox" id="fBatch" checked> Batch</label>
+      <label><input type="checkbox" id="fOther" checked> Other details (sample name, source / destination, MW…)</label></div>
+    <button id="expGo" style="background:#2563eb;color:#fff;border-color:#2563eb">Export selected</button> <span id="expMsg" class="note"></span>
+  </div>
   <div id="summary"></div>
   <div id="legend"></div>
   <div id="scroll"><div id="grid"></div></div>
@@ -285,6 +307,7 @@ function refreshPlates() {
   if (prev && opts.some(function (o) { return o[0] === prev; })) sel.value = prev;
   $("viewer").style.display = "";
   render();
+  fillExportViews();
 }
 
 function fmtNum(x, p) { return String(parseFloat(x.toPrecision(p || 4))); }
@@ -346,8 +369,7 @@ function lerpColor(t) {
   return "rgb(" + a.map(function (x, j) { return Math.round(x + (b[j] - x) * f); }).join(",") + ")";
 }
 
-function render() {
-  var parts = $("plate").value.split("|"), bc = parts[0], role = parts[1];
+function prepareView(bc, role) {
   var items = buildItems(bc, role), metric = $("metric").value;
   var maxR = 0, maxC = 0;
   items.forEach(function (it) { maxR = Math.max(maxR, it.pos.r); maxC = Math.max(maxC, it.pos.c); });
@@ -359,19 +381,17 @@ function render() {
   items.forEach(function (it) { byPos[it.pos.r + "," + it.pos.c] = it; });
 
   // color mapping
-  var legend = $("legend"), colorOf, textLight = function () { return false; };
-  legend.innerHTML = "";
+  var colorOf, textLight = function () { return false; }, legendHtml = "", legendText = "";
   if (metric === "id") {
     var keys = [];
     items.forEach(function (it) { var k = it.batch || it.id || "(none)"; if (keys.indexOf(k) < 0) keys.push(k); });
     colorOf = function (it) { var i = keys.indexOf(it.batch || it.id || "(none)"); return "hsl(" + Math.round((i * 137.5) % 360) + ",65%,82%)"; };
-    legend.appendChild(document.createTextNode(keys.length + " distinct: "));
+    legendHtml = esc(keys.length + " distinct: ");
+    legendText = keys.length + " distinct: " + keys.slice(0, 12).join(", ") + (keys.length > 12 ? " +" + (keys.length - 12) + " more" : "");
     keys.slice(0, 12).forEach(function (k) {
-      var s = document.createElement("span"); s.className = "sw";
-      s.innerHTML = '<i style="background:' + colorOf({ batch: k }) + '"></i>' + esc(k);
-      legend.appendChild(s);
+      legendHtml += '<span class="sw"><i style="background:' + colorOf({ batch: k }) + '"></i>' + esc(k) + "</span>";
     });
-    if (keys.length > 12) legend.appendChild(document.createTextNode("+" + (keys.length - 12) + " more"));
+    if (keys.length > 12) legendHtml += esc("+" + (keys.length - 12) + " more");
   } else {
     var useLog = metric === "conc", vals = [];
     items.forEach(function (it) {
@@ -387,10 +407,36 @@ function render() {
     var lo = metric === "conc" ? fmtConc(Math.pow(10, mn)) : fmtNum(mn) + unitTxt;
     var hi = metric === "conc" ? fmtConc(Math.pow(10, mx)) : fmtNum(mx) + unitTxt;
     if (!vals.length) { lo = hi = "n/a"; }
-    legend.innerHTML = esc(lo) + '<div id="bar" style="background:linear-gradient(to right,' + STOPS.join(",") + ')"></div>' + esc(hi) +
+    legendHtml = esc(lo) + '<div id="bar" style="background:linear-gradient(to right,' + STOPS.join(",") + ')"></div>' + esc(hi) +
       (metric === "conc" ? " (log scale)" : "");
+    legendText = lo + " to " + hi + (metric === "conc" ? " (log scale)" : "");
   }
 
+  var showWell = $("sWell").checked, sVol = $("sVol").checked, sConc = $("sConc").checked, sId = $("sId").checked, sBatch = $("sBatch").checked;
+  items.forEach(function (it) {
+    var L = rowLetter(it.pos.r) + (it.pos.c + 1);
+    it.bg = colorOf(it); it.fg = textLight(it) ? "#fff" : "#111827";
+    it.lines = [];
+    if (showWell) it.lines.push([L, "n"]);
+    if (sVol && it.vol !== null) it.lines.push([fmtVol(it.vol, it.volUnit), "v"]);
+    if (sConc && it.concText) it.lines.push([it.concText, ""]);
+    if (sId && it.id) it.lines.push([it.id, ""]);
+    if (sBatch && it.batch) it.lines.push([it.batch, "b"]);
+  });
+
+  var sum = items.length + " wells filled on " + bc + " · " + roleLabel(role) + " · " + (rows * cols) + "-well layout";
+  if (role !== "mos") {
+    var tot = items.reduce(function (a, it) { return a + (it.vol || 0); }, 0);
+    sum += " · total " + fmtNum(tot, 6) + " nL transferred";
+  }
+  return { bc: bc, role: role, items: items, rows: rows, cols: cols, title: sum, legendHtml: legendHtml, legendText: legendText, byPos: byPos };
+}
+
+function render() {
+  var parts = $("plate").value.split("|");
+  var v = prepareView(parts[0], parts[1]);
+  var rows = v.rows, cols = v.cols, byPos = v.byPos;
+  $("legend").innerHTML = v.legendHtml;
   var cw = Math.round(1.0 * $("zoom").value * 0.92), fs = Math.round($("zoom").value * 0.11);
   var grid = $("grid");
   grid.style.gridTemplateColumns = "28px repeat(" + cols + ", " + cw + "px)";
@@ -399,43 +445,24 @@ function render() {
   var corner = document.createElement("div"); corner.className = "h corner"; grid.appendChild(corner);
   var c, r;
   for (c = 0; c < cols; c++) { var hc = document.createElement("div"); hc.className = "h col"; hc.textContent = c + 1; grid.appendChild(hc); }
-  var showWell = $("sWell").checked, sVol = $("sVol").checked, sConc = $("sConc").checked, sId = $("sId").checked, sBatch = $("sBatch").checked;
   for (r = 0; r < rows; r++) {
-    var L = r < 26 ? String.fromCharCode(65 + r) : "A" + String.fromCharCode(65 + r - 26);
+    var L = rowLetter(r);
     var hr = document.createElement("div"); hr.className = "h row"; hr.textContent = L; grid.appendChild(hr);
     for (c = 0; c < cols; c++) {
       var it = byPos[r + "," + c], d = document.createElement("div");
       if (!it) { d.className = "w empty"; grid.appendChild(d); continue; }
       d.className = "w";
-      d.style.background = colorOf(it);
-      d.style.color = textLight(it) ? "#fff" : "#111827";
-      var html = "";
-      if (showWell) html += '<div class="n">' + L + (c + 1) + "</div>";
-      if (sVol && it.vol !== null) html += '<div class="v">' + esc(fmtVol(it.vol, it.volUnit)) + "</div>";
-      if (sConc && it.concText) html += "<div>" + esc(it.concText) + "</div>";
-      if (sId && it.id) html += "<div>" + esc(it.id) + "</div>";
-      if (sBatch && it.batch) html += '<div class="b">' + esc(it.batch) + "</div>";
-      d.innerHTML = html;
-      it.bg = colorOf(it); it.fg = textLight(it) ? "#fff" : "#111827";
-      it.lines = [];
-      if (showWell) it.lines.push([L + (c + 1), "n"]);
-      if (sVol && it.vol !== null) it.lines.push([fmtVol(it.vol, it.volUnit), "v"]);
-      if (sConc && it.concText) it.lines.push([it.concText, ""]);
-      if (sId && it.id) it.lines.push([it.id, ""]);
-      if (sBatch && it.batch) it.lines.push([it.batch, "b"]);
+      d.style.background = it.bg;
+      d.style.color = it.fg;
+      d.innerHTML = it.lines.map(function (l) { return '<div' + (l[1] ? ' class="' + l[1] + '"' : "") + ">" + esc(l[0]) + "</div>"; }).join("");
       d.dataset.tip = '<b>' + L + (c + 1) + "</b><br>" + it.tip.filter(function (t) { return t[1]; })
         .map(function (t) { return esc(t[0]) + ": " + esc(t[1]); }).join("<br>");
       grid.appendChild(d);
     }
   }
 
-  var sum = items.length + " wells filled on " + bc + " · " + roleLabel(role) + " · " + (rows * cols) + "-well layout";
-  if (role !== "mos") {
-    var tot = items.reduce(function (a, it) { return a + (it.vol || 0); }, 0);
-    sum += " · total " + fmtNum(tot, 6) + " nL transferred";
-  }
-  $("summary").textContent = sum;
-  lastView = { bc: bc, role: role, items: items, rows: rows, cols: cols, title: sum, legendText: $("legend").innerText };
+  $("summary").textContent = v.title;
+  lastView = v;
 }
 
 var lastView = null;
@@ -447,24 +474,53 @@ function download(name, blob) {
   setTimeout(function () { URL.revokeObjectURL(a.href); }, 2000);
 }
 function rowLetter(r) { return r < 26 ? String.fromCharCode(65 + r) : "A" + String.fromCharCode(65 + r - 26); }
-function baseName() { return (lastView.bc + "_" + lastView.role).replace(/[^\w\-]+/g, "_"); }
+function baseName(v) { return (v.bc + "_" + v.role).replace(/[^\w\-]+/g, "_"); }
 
-function exportCSV() {
-  if (!lastView) return;
-  function q(v) { v = v == null ? "" : String(v); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; }
-  var head = ["Plate", "View", "Well", "Row", "Column", "Volume", "Volume Units", "Concentration (M)", "Concentration", "Sample ID / Compound", "Batch", "Details"];
-  var lines = [head.join(",")];
-  lastView.items.slice().sort(function (a, b) { return a.pos.r - b.pos.r || a.pos.c - b.pos.c; }).forEach(function (it) {
-    lines.push([lastView.bc, roleLabel(lastView.role), rowLetter(it.pos.r) + (it.pos.c + 1), rowLetter(it.pos.r), it.pos.c + 1,
-      it.vol === null ? "" : it.vol, it.volUnit, it.conc === null || it.conc === undefined ? "" : it.conc, it.concText, it.id, it.batch,
-      it.tip.filter(function (t) { return t[1]; }).map(function (t) { return t[0] + ": " + t[1]; }).join(" | ")].map(q).join(","));
-  });
-  download(baseName() + ".csv", new Blob(["\ufeff" + lines.join("\r\n")], { type: "text/csv" }));
+function listColumns(v, o) {
+  var skip = ["Sample ID", "Batch", "Total volume", "Final conc.", "Source conc.", "Conc.", "Amount"];
+  if (v.role === "mos") skip.push("Compound");
+  var extra = [];
+  v.items.forEach(function (it) { it.tip.forEach(function (t) { if (skip.indexOf(t[0]) < 0 && extra.indexOf(t[0]) < 0) extra.push(t[0]); }); });
+  function tipOf(it, h) { for (var i = 0; i < it.tip.length; i++) if (it.tip[i][0] === h) return it.tip[i][1]; return ""; }
+  var cols = [
+    { h: "Well", w: 50, get: function (it) { return rowLetter(it.pos.r) + (it.pos.c + 1); } },
+    { h: "Row", w: 40, get: function (it) { return rowLetter(it.pos.r); } },
+    { h: "Column", w: 50, num: true, get: function (it) { return it.pos.c + 1; } }
+  ];
+  if (o.fVol) cols.push({ h: "Volume", w: 70, num: true, get: function (it) { return it.vol === null ? "" : it.vol; } },
+    { h: "Volume Units", w: 70, get: function (it) { return it.volUnit; } });
+  if (o.fConc) cols.push({ h: "Concentration (M)", w: 100, num: true, sci: true, get: function (it) { return it.conc === null || it.conc === undefined ? "" : it.conc; } },
+    { h: "Concentration", w: 90, get: function (it) { return it.concText; } });
+  if (o.fId) cols.push({ h: "Sample ID / Compound", w: 150, get: function (it) { return it.id; } });
+  if (o.fBatch) cols.push({ h: "Batch", w: 170, get: function (it) { return it.batch; } });
+  if (o.fOther) extra.forEach(function (h) { cols.push({ h: h, w: 160, get: function (it) { return tipOf(it, h); } }); });
+  return cols;
 }
 
-function exportExcel() {
-  if (!lastView) return;
-  var v = lastView;
+function sortedItems(v) { return v.items.slice().sort(function (a, b) { return a.pos.r - b.pos.r || a.pos.c - b.pos.c; }); }
+
+function csvText(views, o) {
+  function q(v) { v = v == null ? "" : String(v); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; }
+  var lines = [], heads = [];
+  views.forEach(function (v) {
+    var cols = listColumns(v, o), key = cols.map(function (c) { return c.h; }).join("|");
+    if (heads.indexOf(key) < 0) { heads.push(key); if (lines.length) lines.push(""); lines.push(["Plate", "View"].concat(cols.map(function (c) { return c.h; })).map(q).join(",")); }
+    sortedItems(v).forEach(function (it) {
+      lines.push([v.bc, roleLabel(v.role)].concat(cols.map(function (c) { return c.get(it); })).map(q).join(","));
+    });
+  });
+  return "\ufeff" + lines.join("\r\n");
+}
+
+function workbookXml(views, o) {
+  var sheets = "", used = {};
+  function sheetName(v, kind) {
+    var base = (v.bc + " " + (v.role === "mos" ? "Mosaic" : v.role === "dest" ? "Dest" : "Src") + " " + kind).replace(/[\\\/\?\*\[\]:]/g, "-");
+    var n = base.slice(0, 31), i = 2;
+    while (used[n]) n = base.slice(0, 28) + " " + (i++);
+    used[n] = 1;
+    return n;
+  }
   function x(s) { return esc(s).replace(/\r?\n/g, "&#10;"); }
   var cvs = document.createElement("canvas").getContext("2d");
   function hex(c) { cvs.fillStyle = "#000000"; cvs.fillStyle = c; return cvs.fillStyle.toUpperCase(); }
@@ -481,6 +537,7 @@ function exportExcel() {
   function S(val, st) { return '<Cell' + (st ? ' ss:StyleID="' + st + '"' : "") + '><Data ss:Type="String">' + x(val) + "</Data></Cell>"; }
   function N(val, st) { return '<Cell' + (st ? ' ss:StyleID="' + st + '"' : "") + '><Data ss:Type="Number">' + val + "</Data></Cell>"; }
 
+  views.forEach(function (v) {
   var byPos = {};
   v.items.forEach(function (it) { byPos[it.pos.r + "," + it.pos.c] = it; });
   var r, c, grid = '<Row ss:Height="18">' + S(v.title, "title") + '</Row><Row ss:Height="6"></Row>';
@@ -497,40 +554,36 @@ function exportExcel() {
     }
     grid += "</Row>";
   }
-  var mapSheet = '<Worksheet ss:Name="Plate Map"><Table><Column ss:Width="26"/><Column ss:Width="105" ss:Span="' + (v.cols - 1) + '"/>' + grid + "</Table>" +
+  var mapSheet = '<Worksheet ss:Name="' + esc(sheetName(v, "Map")) + '"><Table><Column ss:Width="26"/><Column ss:Width="105" ss:Span="' + (v.cols - 1) + '"/>' + grid + "</Table>" +
     '<WorksheetOptions xmlns="urn:schemas-microsoft-com:office:excel"><FreezePanes/><FrozenNoSplit/><SplitHorizontal>3</SplitHorizontal><SplitVertical>1</SplitVertical><TopRowBottomPane>3</TopRowBottomPane><LeftColumnRightPane>1</LeftColumnRightPane><ActivePane>0</ActivePane></WorksheetOptions></Worksheet>';
 
-  var skip = ["Sample ID", "Batch", "Total volume", "Final conc.", "Source conc.", "Conc.", "Amount", "Compound"];
-  var extra = [];
-  v.items.forEach(function (it) { it.tip.forEach(function (t) { if (skip.indexOf(t[0]) < 0 && extra.indexOf(t[0]) < 0) extra.push(t[0]); }); });
-  var head = ["Well", "Row", "Column", "Volume", "Volume Units", "Concentration (M)", "Concentration", "Sample ID / Compound", "Batch"].concat(extra);
-  var list = '<Row ss:Height="20">' + head.map(function (h) { return S(h, "hdr"); }).join("") + "</Row>";
-  v.items.slice().sort(function (a, b) { return a.pos.r - b.pos.r || a.pos.c - b.pos.c; }).forEach(function (it) {
-    var tipMap = {}; it.tip.forEach(function (t) { tipMap[t[0]] = t[1]; });
-    list += "<Row>" + S(rowLetter(it.pos.r) + (it.pos.c + 1)) + S(rowLetter(it.pos.r)) + N(it.pos.c + 1) +
-      (it.vol === null ? S("") : N(it.vol)) + S(it.volUnit) +
-      (it.conc === null || it.conc === undefined ? S("") : N(it.conc, "sci")) + S(it.concText) + S(it.id) + S(it.batch) +
-      extra.map(function (h) { return S(tipMap[h] || ""); }).join("") + "</Row>";
+  var lc = listColumns(v, o);
+  var list = '<Row ss:Height="20">' + lc.map(function (c) { return S(c.h, "hdr"); }).join("") + "</Row>";
+  sortedItems(v).forEach(function (it) {
+    list += "<Row>" + lc.map(function (c) {
+      var val = c.get(it);
+      return c.num && val !== "" ? N(val, c.sci ? "sci" : "") : S(val);
+    }).join("") + "</Row>";
   });
-  var widths = [50, 40, 50, 70, 70, 100, 90, 150, 170];
-  var cols = head.map(function (h, i) { return '<Column ss:Width="' + (widths[i] || 160) + '"/>'; }).join("");
-  var listSheet = '<Worksheet ss:Name="Well List"><Table>' + cols + list + "</Table>" +
+  var colXml = lc.map(function (c) { return '<Column ss:Width="' + c.w + '"/>'; }).join("");
+  var listSheet = '<Worksheet ss:Name="' + esc(sheetName(v, "List")) + '"><Table>' + colXml + list + "</Table>" +
     '<WorksheetOptions xmlns="urn:schemas-microsoft-com:office:excel"><FreezePanes/><FrozenNoSplit/><SplitHorizontal>1</SplitHorizontal><TopRowBottomPane>1</TopRowBottomPane><ActivePane>2</ActivePane></WorksheetOptions>' +
-    '<AutoFilter x:Range="R1C1:R' + (v.items.length + 1) + "C" + head.length + '" xmlns="urn:schemas-microsoft-com:office:excel"/></Worksheet>';
+    '<AutoFilter x:Range="R1C1:R' + (v.items.length + 1) + "C" + lc.length + '" xmlns="urn:schemas-microsoft-com:office:excel"/></Worksheet>';
+  if (o.map) sheets += mapSheet;
+  if (o.list) sheets += listSheet;
+  });
 
-  var xml = '<?xml version="1.0" encoding="UTF-8"?><?mso-application progid="Excel.Sheet"?>' +
+  return '<?xml version="1.0" encoding="UTF-8"?><?mso-application progid="Excel.Sheet"?>' +
     '<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">' +
     '<Styles><Style ss:ID="Default"><Font ss:FontName="Segoe UI" ss:Size="10"/></Style>' +
     '<Style ss:ID="title"><Font ss:FontName="Segoe UI" ss:Size="12" ss:Bold="1"/></Style>' +
     '<Style ss:ID="hdr"><Alignment ss:Horizontal="Center" ss:Vertical="Center"/><Font ss:FontName="Segoe UI" ss:Size="10" ss:Bold="1" ss:Color="#FFFFFF"/><Interior ss:Color="#374151" ss:Pattern="Solid"/></Style>' +
     '<Style ss:ID="empty"><Interior ss:Color="#F3F4F6" ss:Pattern="Solid"/></Style>' +
-    '<Style ss:ID="sci"><NumberFormat ss:Format="0.00E+00"/></Style>' + styleXml + "</Styles>" + mapSheet + listSheet + "</Workbook>";
-  download(baseName() + ".xls", new Blob([xml], { type: "application/vnd.ms-excel" }));
+    '<Style ss:ID="sci"><NumberFormat ss:Format="0.00E+00"/></Style>' + styleXml + "</Styles>" + sheets + "</Workbook>";
 }
 
-function exportPNG() {
-  if (!lastView) return;
-  var v = lastView, cw = 128, ch = 66, hd = 24, top = 52, sc = 2;
+function exportPNG(v) {
+  var cw = 128, ch = 66, hd = 24, top = 52, sc = 2;
   var W = hd + v.cols * cw + 20, H = top + hd + v.rows * ch + 10;
   var cv = document.createElement("canvas"); cv.width = W * sc; cv.height = H * sc;
   var g = cv.getContext("2d"); g.scale(sc, sc);
@@ -557,12 +610,62 @@ function exportPNG() {
       g.fillText(fit(l[0], cw - 10), x + 4, y + 9 + i * 12.5);
     });
   }
-  cv.toBlob(function (b) { download(baseName() + ".png", b); }, "image/png");
+  cv.toBlob(function (b) { download(baseName(v) + ".png", b); }, "image/png");
 }
 
-$("expCsv").addEventListener("click", exportCSV);
-$("expXls").addEventListener("click", exportExcel);
-$("expPng").addEventListener("click", exportPNG);
+function selectedViews() {
+  var out = [];
+  Array.prototype.forEach.call(document.querySelectorAll("#expViews input:checked"), function (cb) {
+    var p = cb.value.split("|"); out.push(prepareView(p[0], p[1]));
+  });
+  return out;
+}
+
+function fillExportViews() {
+  var box = $("expViews"), keep = {}, cur = $("plate").value;
+  Array.prototype.forEach.call(box.querySelectorAll("input"), function (cb) { keep[cb.value] = cb.checked; });
+  box.innerHTML = "";
+  Array.prototype.forEach.call($("plate").options, function (o) {
+    var l = document.createElement("label"), cb = document.createElement("input");
+    cb.type = "checkbox"; cb.value = o.value; cb.checked = o.value in keep ? keep[o.value] : o.value === cur;
+    l.appendChild(cb); l.appendChild(document.createTextNode(" " + o.textContent));
+    box.appendChild(l);
+  });
+}
+
+function updateExportOptions() {
+  var f = document.querySelector('input[name="expFmt"]:checked').value;
+  $("expSheets").style.display = f === "xls" ? "" : "none";
+  $("expCols").style.display = f === "png" ? "none" : "";
+}
+
+function doExport() {
+  var views = selectedViews(), f = document.querySelector('input[name="expFmt"]:checked').value, msg = $("expMsg");
+  if (!views.length) { msg.textContent = "Select at least one plate/view."; return; }
+  var o = {
+    map: $("eMap").checked, list: $("eList").checked,
+    fVol: $("fVol").checked, fConc: $("fConc").checked, fId: $("fId").checked, fBatch: $("fBatch").checked, fOther: $("fOther").checked
+  };
+  var name = views.length === 1 ? baseName(views[0]) : "plate_maps_" + views.length + "_views";
+  if (f === "xls") {
+    if (!o.map && !o.list) { msg.textContent = "Tick at least one sheet type."; return; }
+    download(name + ".xls", new Blob([workbookXml(views, o)], { type: "application/vnd.ms-excel" }));
+  } else if (f === "csv") {
+    download(name + ".csv", new Blob([csvText(views, o)], { type: "text/csv" }));
+  } else {
+    views.forEach(function (v, i) { setTimeout(function () { exportPNG(v); }, i * 400); });
+  }
+  msg.textContent = "Exported " + views.length + " view" + (views.length > 1 ? "s" : "") + ".";
+}
+
+$("expToggle").addEventListener("click", function () {
+  var p = $("expPanel"); p.style.display = p.style.display === "none" ? "" : "none";
+  if (p.style.display === "") fillExportViews();
+});
+$("expAll").addEventListener("click", function () { Array.prototype.forEach.call(document.querySelectorAll("#expViews input"), function (c) { c.checked = true; }); });
+$("expNone").addEventListener("click", function () { Array.prototype.forEach.call(document.querySelectorAll("#expViews input"), function (c) { c.checked = false; }); });
+Array.prototype.forEach.call(document.querySelectorAll('input[name="expFmt"]'), function (r) { r.addEventListener("change", updateExportOptions); });
+$("expGo").addEventListener("click", doExport);
 
 var tip = $("tip");
 $("grid").addEventListener("mousemove", function (e) {
