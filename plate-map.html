@@ -72,7 +72,7 @@
       <label><input type="checkbox" id="sBatch" checked> Batch</label>
     </div>
   </div>
-  <div style="margin-top:12px"><button id="expPng">Export image (PNG)</button> <button id="expCsv">Export data (CSV)</button></div>
+  <div style="margin-top:12px"><button id="expPng">Export image (PNG)</button> <button id="expXls">Export Excel</button> <button id="expCsv">CSV</button></div>
   <div id="summary"></div>
   <div id="legend"></div>
   <div id="scroll"><div id="grid"></div></div>
@@ -462,6 +462,72 @@ function exportCSV() {
   download(baseName() + ".csv", new Blob(["\ufeff" + lines.join("\r\n")], { type: "text/csv" }));
 }
 
+function exportExcel() {
+  if (!lastView) return;
+  var v = lastView;
+  function x(s) { return esc(s).replace(/\r?\n/g, "&#10;"); }
+  var cvs = document.createElement("canvas").getContext("2d");
+  function hex(c) { cvs.fillStyle = "#000000"; cvs.fillStyle = c; return cvs.fillStyle.toUpperCase(); }
+  var styles = {}, styleXml = "";
+  function cellStyle(bg, fg) {
+    var id = "c" + bg.slice(1) + fg.slice(1);
+    if (!styles[id]) {
+      styles[id] = 1;
+      styleXml += '<Style ss:ID="' + id + '"><Alignment ss:Vertical="Top" ss:WrapText="1"/><Font ss:FontName="Segoe UI" ss:Size="9" ss:Color="' + fg + '"/><Interior ss:Color="' + bg + '" ss:Pattern="Solid"/>' +
+        '<Borders><Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Color="#FFFFFF" ss:Weight="2"/><Border ss:Position="Right" ss:LineStyle="Continuous" ss:Color="#FFFFFF" ss:Weight="2"/></Borders></Style>';
+    }
+    return id;
+  }
+  function S(val, st) { return '<Cell' + (st ? ' ss:StyleID="' + st + '"' : "") + '><Data ss:Type="String">' + x(val) + "</Data></Cell>"; }
+  function N(val, st) { return '<Cell' + (st ? ' ss:StyleID="' + st + '"' : "") + '><Data ss:Type="Number">' + val + "</Data></Cell>"; }
+
+  var byPos = {};
+  v.items.forEach(function (it) { byPos[it.pos.r + "," + it.pos.c] = it; });
+  var r, c, grid = '<Row ss:Height="18">' + S(v.title, "title") + '</Row><Row ss:Height="6"></Row>';
+  grid += '<Row ss:Height="18">' + S("", "hdr");
+  for (c = 0; c < v.cols; c++) grid += N(c + 1, "hdr");
+  grid += "</Row>";
+  for (r = 0; r < v.rows; r++) {
+    grid += '<Row ss:Height="68">' + S(rowLetter(r), "hdr");
+    for (c = 0; c < v.cols; c++) {
+      var it = byPos[r + "," + c];
+      if (!it) { grid += S("", "empty"); continue; }
+      var txt = (it.lines || []).map(function (l) { return l[0]; }).join("\n");
+      grid += S(txt, cellStyle(hex(it.bg), hex(it.fg)));
+    }
+    grid += "</Row>";
+  }
+  var mapSheet = '<Worksheet ss:Name="Plate Map"><Table><Column ss:Width="26"/><Column ss:Width="105" ss:Span="' + (v.cols - 1) + '"/>' + grid + "</Table>" +
+    '<WorksheetOptions xmlns="urn:schemas-microsoft-com:office:excel"><FreezePanes/><FrozenNoSplit/><SplitHorizontal>3</SplitHorizontal><SplitVertical>1</SplitVertical><TopRowBottomPane>3</TopRowBottomPane><LeftColumnRightPane>1</LeftColumnRightPane><ActivePane>0</ActivePane></WorksheetOptions></Worksheet>';
+
+  var skip = ["Sample ID", "Batch", "Total volume", "Final conc.", "Source conc.", "Conc.", "Amount", "Compound"];
+  var extra = [];
+  v.items.forEach(function (it) { it.tip.forEach(function (t) { if (skip.indexOf(t[0]) < 0 && extra.indexOf(t[0]) < 0) extra.push(t[0]); }); });
+  var head = ["Well", "Row", "Column", "Volume", "Volume Units", "Concentration (M)", "Concentration", "Sample ID / Compound", "Batch"].concat(extra);
+  var list = '<Row ss:Height="20">' + head.map(function (h) { return S(h, "hdr"); }).join("") + "</Row>";
+  v.items.slice().sort(function (a, b) { return a.pos.r - b.pos.r || a.pos.c - b.pos.c; }).forEach(function (it) {
+    var tipMap = {}; it.tip.forEach(function (t) { tipMap[t[0]] = t[1]; });
+    list += "<Row>" + S(rowLetter(it.pos.r) + (it.pos.c + 1)) + S(rowLetter(it.pos.r)) + N(it.pos.c + 1) +
+      (it.vol === null ? S("") : N(it.vol)) + S(it.volUnit) +
+      (it.conc === null || it.conc === undefined ? S("") : N(it.conc, "sci")) + S(it.concText) + S(it.id) + S(it.batch) +
+      extra.map(function (h) { return S(tipMap[h] || ""); }).join("") + "</Row>";
+  });
+  var widths = [50, 40, 50, 70, 70, 100, 90, 150, 170];
+  var cols = head.map(function (h, i) { return '<Column ss:Width="' + (widths[i] || 160) + '"/>'; }).join("");
+  var listSheet = '<Worksheet ss:Name="Well List"><Table>' + cols + list + "</Table>" +
+    '<WorksheetOptions xmlns="urn:schemas-microsoft-com:office:excel"><FreezePanes/><FrozenNoSplit/><SplitHorizontal>1</SplitHorizontal><TopRowBottomPane>1</TopRowBottomPane><ActivePane>2</ActivePane></WorksheetOptions>' +
+    '<AutoFilter x:Range="R1C1:R' + (v.items.length + 1) + "C" + head.length + '" xmlns="urn:schemas-microsoft-com:office:excel"/></Worksheet>';
+
+  var xml = '<?xml version="1.0" encoding="UTF-8"?><?mso-application progid="Excel.Sheet"?>' +
+    '<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">' +
+    '<Styles><Style ss:ID="Default"><Font ss:FontName="Segoe UI" ss:Size="10"/></Style>' +
+    '<Style ss:ID="title"><Font ss:FontName="Segoe UI" ss:Size="12" ss:Bold="1"/></Style>' +
+    '<Style ss:ID="hdr"><Alignment ss:Horizontal="Center" ss:Vertical="Center"/><Font ss:FontName="Segoe UI" ss:Size="10" ss:Bold="1" ss:Color="#FFFFFF"/><Interior ss:Color="#374151" ss:Pattern="Solid"/></Style>' +
+    '<Style ss:ID="empty"><Interior ss:Color="#F3F4F6" ss:Pattern="Solid"/></Style>' +
+    '<Style ss:ID="sci"><NumberFormat ss:Format="0.00E+00"/></Style>' + styleXml + "</Styles>" + mapSheet + listSheet + "</Workbook>";
+  download(baseName() + ".xls", new Blob([xml], { type: "application/vnd.ms-excel" }));
+}
+
 function exportPNG() {
   if (!lastView) return;
   var v = lastView, cw = 128, ch = 66, hd = 24, top = 52, sc = 2;
@@ -495,6 +561,7 @@ function exportPNG() {
 }
 
 $("expCsv").addEventListener("click", exportCSV);
+$("expXls").addEventListener("click", exportExcel);
 $("expPng").addEventListener("click", exportPNG);
 
 var tip = $("tip");
