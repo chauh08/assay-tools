@@ -72,6 +72,7 @@
       <label><input type="checkbox" id="sBatch" checked> Batch</label>
     </div>
   </div>
+  <div style="margin-top:12px"><button id="expPng">Export image (PNG)</button> <button id="expCsv">Export data (CSV)</button></div>
   <div id="summary"></div>
   <div id="legend"></div>
   <div id="scroll"><div id="grid"></div></div>
@@ -415,6 +416,13 @@ function render() {
       if (sId && it.id) html += "<div>" + esc(it.id) + "</div>";
       if (sBatch && it.batch) html += '<div class="b">' + esc(it.batch) + "</div>";
       d.innerHTML = html;
+      it.bg = colorOf(it); it.fg = textLight(it) ? "#fff" : "#111827";
+      it.lines = [];
+      if (showWell) it.lines.push([L + (c + 1), "n"]);
+      if (sVol && it.vol !== null) it.lines.push([fmtVol(it.vol, it.volUnit), "v"]);
+      if (sConc && it.concText) it.lines.push([it.concText, ""]);
+      if (sId && it.id) it.lines.push([it.id, ""]);
+      if (sBatch && it.batch) it.lines.push([it.batch, "b"]);
       d.dataset.tip = '<b>' + L + (c + 1) + "</b><br>" + it.tip.filter(function (t) { return t[1]; })
         .map(function (t) { return esc(t[0]) + ": " + esc(t[1]); }).join("<br>");
       grid.appendChild(d);
@@ -427,7 +435,67 @@ function render() {
     sum += " · total " + fmtNum(tot, 6) + " nL transferred";
   }
   $("summary").textContent = sum;
+  lastView = { bc: bc, role: role, items: items, rows: rows, cols: cols, title: sum, legendText: $("legend").innerText };
 }
+
+var lastView = null;
+
+function download(name, blob) {
+  var a = document.createElement("a");
+  a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(function () { URL.revokeObjectURL(a.href); }, 2000);
+}
+function rowLetter(r) { return r < 26 ? String.fromCharCode(65 + r) : "A" + String.fromCharCode(65 + r - 26); }
+function baseName() { return (lastView.bc + "_" + lastView.role).replace(/[^\w\-]+/g, "_"); }
+
+function exportCSV() {
+  if (!lastView) return;
+  function q(v) { v = v == null ? "" : String(v); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; }
+  var head = ["Plate", "View", "Well", "Row", "Column", "Volume", "Volume Units", "Concentration (M)", "Concentration", "Sample ID / Compound", "Batch", "Details"];
+  var lines = [head.join(",")];
+  lastView.items.slice().sort(function (a, b) { return a.pos.r - b.pos.r || a.pos.c - b.pos.c; }).forEach(function (it) {
+    lines.push([lastView.bc, roleLabel(lastView.role), rowLetter(it.pos.r) + (it.pos.c + 1), rowLetter(it.pos.r), it.pos.c + 1,
+      it.vol === null ? "" : it.vol, it.volUnit, it.conc === null || it.conc === undefined ? "" : it.conc, it.concText, it.id, it.batch,
+      it.tip.filter(function (t) { return t[1]; }).map(function (t) { return t[0] + ": " + t[1]; }).join(" | ")].map(q).join(","));
+  });
+  download(baseName() + ".csv", new Blob(["\ufeff" + lines.join("\r\n")], { type: "text/csv" }));
+}
+
+function exportPNG() {
+  if (!lastView) return;
+  var v = lastView, cw = 128, ch = 66, hd = 24, top = 52, sc = 2;
+  var W = hd + v.cols * cw + 20, H = top + hd + v.rows * ch + 10;
+  var cv = document.createElement("canvas"); cv.width = W * sc; cv.height = H * sc;
+  var g = cv.getContext("2d"); g.scale(sc, sc);
+  g.fillStyle = "#fff"; g.fillRect(0, 0, W, H);
+  g.textBaseline = "middle"; g.fillStyle = "#111827"; g.font = "bold 14px Segoe UI, Arial";
+  g.fillText(v.title, 10, 16);
+  g.font = "12px Segoe UI, Arial"; g.fillStyle = "#4b5563";
+  g.fillText("Color by " + $("metric").options[$("metric").selectedIndex].text + ": " + v.legendText.replace(/\s+/g, " ").slice(0, 160), 10, 36);
+  g.font = "bold 12px Segoe UI, Arial"; g.textAlign = "center"; g.fillStyle = "#6b7280";
+  var r, c;
+  for (c = 0; c < v.cols; c++) g.fillText(c + 1, hd + c * cw + cw / 2, top + hd / 2);
+  for (r = 0; r < v.rows; r++) g.fillText(rowLetter(r), hd / 2, top + hd + r * ch + ch / 2);
+  g.textAlign = "left";
+  function fit(t, w) { while (t.length > 1 && g.measureText(t).width > w) t = t.slice(0, -2) + "…"; return t; }
+  var byPos = {};
+  v.items.forEach(function (it) { byPos[it.pos.r + "," + it.pos.c] = it; });
+  for (r = 0; r < v.rows; r++) for (c = 0; c < v.cols; c++) {
+    var x = hd + c * cw + 1, y = top + hd + r * ch + 1, it = byPos[r + "," + c];
+    g.fillStyle = it ? it.bg : "#f9fafb"; g.fillRect(x, y, cw - 3, ch - 3);
+    if (!it) continue;
+    g.fillStyle = it.fg;
+    (it.lines || []).slice(0, 5).forEach(function (l, i) {
+      g.font = (l[1] === "n" || l[1] === "v" ? "bold " : "") + (l[1] === "n" ? "10px" : "11px") + " Segoe UI, Arial";
+      g.fillText(fit(l[0], cw - 10), x + 4, y + 9 + i * 12.5);
+    });
+  }
+  cv.toBlob(function (b) { download(baseName() + ".png", b); }, "image/png");
+}
+
+$("expCsv").addEventListener("click", exportCSV);
+$("expPng").addEventListener("click", exportPNG);
 
 var tip = $("tip");
 $("grid").addEventListener("mousemove", function (e) {
