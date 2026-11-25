@@ -6,8 +6,6 @@
 <title>Plate Map Viewer</title>
 <style>
   * { box-sizing: border-box; }
-  html, body, * { scrollbar-width: none; -ms-overflow-style: none; }
-  html::-webkit-scrollbar, body::-webkit-scrollbar, *::-webkit-scrollbar { display: none; }
   body { margin: 0; padding: 14px; font-family: "Segoe UI", system-ui, sans-serif; background: #f3f5f9; color: #1f2937; }
   .card { background: #fff; border-radius: 14px; padding: 18px 20px; box-shadow: 0 2px 12px rgba(0,0,0,.08); margin-bottom: 14px; }
   h2 { margin: 0 0 2px; font-size: 22px; }
@@ -288,29 +286,35 @@ var embedded = window.top !== window.self;
 var pendingTab = null, pendingFiles = [];
 
 window.addEventListener("message", function (e) {
-  if (e.origin !== location.origin || !e.data) return;
+  if (!e.data) return;
   if (e.data.type === "pm-ready" && pendingTab && e.source === pendingTab) {
-    pendingTab.postMessage({ type: "pm-files", files: pendingFiles }, location.origin);
+    pendingTab.postMessage({ type: "pm-files", files: pendingFiles }, "*");
     pendingFiles = [];
-  } else if (e.data.type === "pm-files") {
+  } else if (e.data.type === "pm-files" && (e.source === window.opener || !window.opener)) {
     e.data.files.forEach(function (f) { loaded.push({ id: nextId++, name: f.name, text: f.text }); });
     rebuild();
   }
 });
 if (window.opener && /[?&]tab=1/.test(location.search)) {
-  try { window.opener.postMessage({ type: "pm-ready" }, location.origin); } catch (err) {}
+  try { window.opener.postMessage({ type: "pm-ready" }, "*"); } catch (err) {}
 }
 
 function loadFiles(list) {
   var files = Array.prototype.slice.call(list);
-  var tab = embedded ? window.open(location.pathname + "?tab=1", "_blank") : null;
+  var tab = null;
+  if (embedded) { try { tab = window.open(location.href.split("?")[0] + "?tab=1", "_blank"); } catch (err) {} }
   Promise.all(files.map(function (f) {
     return f.text().then(function (t) { return { name: f.name, text: t }; });
   })).then(function (res) {
     if (tab) {
       pendingTab = tab; pendingFiles = pendingFiles.concat(res);
+      $("tabNote").textContent = "Opened in a new tab.";
       $("tabNote").style.display = "";
       return;
+    }
+    if (embedded) {
+      $("tabNote").textContent = "Your browser or SharePoint blocked opening a new tab, so the plate map is shown here instead.";
+      $("tabNote").style.display = "";
     }
     res.forEach(function (f) { loaded.push({ id: nextId++, name: f.name, text: f.text }); });
     rebuild();
