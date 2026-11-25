@@ -96,6 +96,7 @@
       <label><input type="checkbox" id="fBatch" checked> Batch</label>
       <label><input type="checkbox" id="fOther" checked> Other details (sample name, source / destination, MW…)</label></div>
     <button id="expGo" style="background:#2563eb;color:#fff;border-color:#2563eb">Export selected</button> <span id="expMsg" class="note"></span>
+    <div id="expLinks" style="margin-top:8px;display:flex;flex-direction:column;gap:4px;font-size:13px"></div>
   </div>
   <div id="summary"></div>
   <div id="legend"></div>
@@ -624,10 +625,15 @@ function render() {
 var lastView = null;
 
 function download(name, blob) {
-  var a = document.createElement("a");
-  a.href = URL.createObjectURL(blob); a.download = name;
+  var url = URL.createObjectURL(blob), a = document.createElement("a");
+  a.href = url; a.download = name;
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
-  setTimeout(function () { URL.revokeObjectURL(a.href); }, 2000);
+  var box = $("expLinks");
+  if (box) {
+    var l = document.createElement("a");
+    l.href = url; l.download = name; l.textContent = "⬇ " + name;
+    box.appendChild(l);
+  }
 }
 function rowLetter(r) { return r < 26 ? String.fromCharCode(65 + r) : "A" + String.fromCharCode(65 + r - 26); }
 function baseName(v) { return (v.bc + "_" + v.role).replace(/[^\w\-]+/g, "_"); }
@@ -808,22 +814,28 @@ function updateExportOptions() {
 }
 
 function doExport() {
-  var views = selectedViews(), f = document.querySelector('input[name="expFmt"]:checked').value, msg = $("expMsg");
-  if (!views.length) { msg.textContent = "Select at least one plate/view."; return; }
-  var o = {
-    map: $("eMap").checked, list: $("eList").checked,
-    fVol: $("fVol").checked, fConc: $("fConc").checked, fId: $("fId").checked, fBatch: $("fBatch").checked, fOther: $("fOther").checked
-  };
-  var name = views.length === 1 ? baseName(views[0]) : "plate_maps_" + views.length + "_views";
-  if (f === "xls") {
-    if (!o.map && !o.list) { msg.textContent = "Tick at least one sheet type."; return; }
-    download(name + ".xls", new Blob([workbookXml(views, o)], { type: "application/vnd.ms-excel" }));
-  } else if (f === "csv") {
-    download(name + ".csv", new Blob([csvText(views, o)], { type: "text/csv" }));
-  } else {
-    views.forEach(function (v, i) { setTimeout(function () { exportPNG(v); }, i * 400); });
+  var views, f = document.querySelector('input[name="expFmt"]:checked').value, msg = $("expMsg");
+  $("expLinks").innerHTML = "";
+  try {
+    views = selectedViews();
+    if (!views.length) { msg.textContent = "Select at least one plate/view."; return; }
+    var o = {
+      map: $("eMap").checked, list: $("eList").checked,
+      fVol: $("fVol").checked, fConc: $("fConc").checked, fId: $("fId").checked, fBatch: $("fBatch").checked, fOther: $("fOther").checked
+    };
+    var name = views.length === 1 ? baseName(views[0]) : "plate_maps_" + views.length + "_views";
+    if (f === "xls") {
+      if (!o.map && !o.list) { msg.textContent = "Tick at least one sheet type."; return; }
+      download(name + ".xls", new Blob([workbookXml(views, o)], { type: "application/vnd.ms-excel" }));
+    } else if (f === "csv") {
+      download(name + ".csv", new Blob([csvText(views, o)], { type: "text/csv" }));
+    } else {
+      views.forEach(function (v, i) { setTimeout(function () { exportPNG(v); }, i * 400); });
+    }
+    msg.textContent = "Exported " + views.length + " view" + (views.length > 1 ? "s" : "") + " at " + new Date().toLocaleTimeString() + ". If no download started, click the link below.";
+  } catch (err) {
+    msg.textContent = "Export failed: " + err.message;
   }
-  msg.textContent = "Exported " + views.length + " view" + (views.length > 1 ? "s" : "") + ".";
 }
 
 $("expToggle").addEventListener("click", function () {
