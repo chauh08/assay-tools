@@ -55,8 +55,8 @@
 <div class="card">
   <h2>Plate Map Viewer</h2>
   <div class="sub">Load an Echo transfer file and/or a Mosaic dispatch file to see each plate as a heatmap.</div>
-  <div id="drop"><b>Click to choose files</b> or drag them here<br><span class="note">Echo transfer file (.csv) and Mosaic dispatch file (.xls / .csv). You can load several at once. Files are read in your browser only; nothing is uploaded.</span></div>
-  <input id="file" type="file" multiple accept=".csv,.xls,.xml,.txt" style="display:none">
+  <div id="drop"><b>Click to choose files</b> or drag them here<br><span class="note">Echo transfer file (.csv), Mosaic dispatch file (.xls / .csv) or any plate list (.xlsx / .xls / .csv) with a plate barcode and well column; header names can vary. You can load several at once. Files are read in your browser only; nothing is uploaded.</span></div>
+  <input id="file" type="file" multiple accept=".csv,.xls,.xlsx,.xml,.txt" style="display:none">
   <div class="chips" id="chips"></div>
   <div id="tabNote" class="note" style="display:none;margin-top:8px">Opened in a new tab. If nothing appeared, allow pop-ups for this site and drop the file again.</div>
 </div>
@@ -159,10 +159,39 @@ function wellPos(w) {
   return { r: r - 1, c: parseInt(m[2], 10) - 1, name: L + parseInt(m[2], 10) };
 }
 
+function nk(s) { return trim(s).toLowerCase().replace(/[^a-z0-9]/g, ""); }
+
+var ALIASES = {
+  "plate barcode": ["platebarcode", "destinationplatebarcode", "destplatebarcode", "destinationbarcode", "destbarcode", "barcode", "plateid", "plateno", "platenumber", "plate", "destinationplate", "destplate", "platename", "destinationplatename"],
+  "position": ["position", "well", "destinationwell", "destwell", "wellposition", "wellid", "wellname", "wellno", "pos", "location", "platewell"],
+  "compound": ["compound", "compoundid", "compoundname", "compoundnumber", "sampleid", "sample", "samplename", "id", "pfnumber", "structureid"],
+  "batch": ["batch", "batchid", "batchnumber", "batchno", "lot", "lotnumber", "lotid", "sampleidbatch"],
+  "molecular weight": ["molecularweight", "mw", "molweight", "molwt", "formulaweight"],
+  "amount": ["amount", "volume", "vol", "quantity", "volumeul", "transfervolume", "actualvolume"],
+  "amount units": ["amountunits", "amountunit", "volumeunits", "volumeunit", "volunits", "volunit"],
+  "concentration": ["concentration", "conc", "destinationconcentration", "destconcentration", "finalconcentration", "finalconc", "concmm", "concentrationmm"],
+  "concentration units": ["concentrationunits", "concentrationunit", "concunits", "concunit", "destinationconcentrationunits", "destconcentrationunits", "finalconcentrationunits", "unitsconc"],
+  "solvent": ["solvent", "solventname", "diluent"],
+  "solvent concentration [%]": ["solventconcentration", "solventconcentration", "solventpercent", "dmso"],
+  "source tube": ["sourcetube", "tube", "tubeid", "tubebarcode"],
+  "precipitate": ["precipitate", "precipitated"],
+  "comments": ["comments", "comment", "notes", "note", "remarks"],
+  "source plate barcode": ["sourceplatebarcode", "srcplatebarcode", "sourcebarcode", "sourceplate"],
+  "source well": ["sourcewell", "srcwell"],
+  "destination plate barcode": ["destinationplatebarcode", "destplatebarcode", "destinationbarcode", "destbarcode", "destinationplate", "destplate"],
+  "destination well": ["destinationwell", "destwell"]
+};
+
 function colIndex(header) {
   var map = {};
-  header.forEach(function (h, i) { map[trim(h).toLowerCase()] = i; });
-  return function (name) { var i = map[name.toLowerCase()]; return i === undefined ? -1 : i; };
+  header.forEach(function (h, i) { var k = nk(h); if (k && map[k] === undefined) map[k] = i; });
+  return function (name) {
+    var k = nk(name), i = map[k];
+    if (i !== undefined) return i;
+    var al = ALIASES[trim(name).toLowerCase()] || [], j;
+    for (j = 0; j < al.length; j++) if (map[al[j]] !== undefined) return map[al[j]];
+    return -1;
+  };
 }
 
 function getPlate(bc) {
@@ -170,8 +199,17 @@ function getPlate(bc) {
   return plates[bc];
 }
 
+var UNIT_CI = { "m": 1, "mm": 1e-3, "um": 1e-6, "µm": 1e-6, "μm": 1e-6, "nm": 1e-9, "pm": 1e-12, "fm": 1e-15 };
+function normUnit(u) {
+  u = trim(u);
+  if (UNIT[u]) return u;
+  var l = u.toLowerCase();
+  return { m: "M", mm: "mM", um: "µM", "µm": "µM", "μm": "µM", nm: "nM", pm: "pM", fm: "fM" }[l] || u;
+}
+
 function toM(v, unit) {
   var n = parseFloat(v), f = UNIT[trim(unit)];
+  if (f === undefined) f = UNIT_CI[trim(unit).toLowerCase()];
   return isFinite(n) && f ? n * f : null;
 }
 
@@ -218,37 +256,114 @@ function ingestEcho(rows) {
 }
 
 function ingestMosaic(rows) {
-  var hi = -1, i;
-  for (i = 0; i < rows.length; i++) {
-    var low = rows[i].map(function (x) { return trim(x).toLowerCase(); });
-    if (low.indexOf("position") >= 0 && low.indexOf("plate barcode") >= 0) { hi = i; break; }
+  var hi = -1, i, g;
+  for (i = 0; i < Math.min(rows.length, 200); i++) {
+    if (rows[i].filter(function (x) { return trim(x) !== ""; }).length < 2) continue;
+    var gi = colIndex(rows[i]);
+    if (gi("Position") >= 0 && gi("Plate Barcode") >= 0) { hi = i; g = gi; break; }
   }
-  if (hi < 0) throw new Error("No 'Plate Barcode' / 'Position' header");
-  var g = colIndex(rows[hi]), n = 0;
-  function v(row, name) { var k = g(name); return k < 0 ? "" : trim(row[k]); }
+  if (hi < 0) throw new Error("could not find plate barcode and well columns");
+  var n = 0;
+  function v(row, name) { var k = g(name); return k < 0 || row[k] == null ? "" : trim(row[k]); }
   for (i = hi + 1; i < rows.length; i++) {
-    var row = rows[i], bc = v(row, "Plate Barcode"), p = wellPos(v(row, "Position"));
+    var row = rows[i];
+    if (!row || trim(row.join("")) === "" || trim(row[0]).charAt(0) === "[") continue;
+    var bc = v(row, "Plate Barcode"), p = wellPos(v(row, "Position"));
     if (!bc || !p) continue;
+    var cu = v(row, "Concentration Units");
     getPlate(bc).mos[p.name] = {
       pos: p, compound: v(row, "Compound"), batch: v(row, "Batch"), mw: v(row, "Molecular Weight"),
       amount: v(row, "Amount"), amountUnits: v(row, "Amount Units"),
-      conc: v(row, "Concentration"), concUnits: v(row, "Concentration Units"),
+      conc: v(row, "Concentration"), concUnits: normUnit(cu),
       solvent: v(row, "Solvent"), solventPct: v(row, "Solvent Concentration [%]"),
       tube: v(row, "Source Tube"), precip: v(row, "Precipitate"), comments: v(row, "Comments")
     };
     n++;
   }
+  if (!n) throw new Error("no wells found under the header row");
   return n + " wells";
 }
 
 function ingestText(name, text) {
-  var kind, info;
+  var kind, info, rows;
+  if (text.indexOf("#xlsxerror:") === 0) throw new Error(text.slice(11));
   text = text.replace(/^\s+/, "");
-  if (text.indexOf("[DETAILS]") >= 0) { kind = "Echo"; info = ingestEcho(parseCSV(text)); }
+  if (text.indexOf("[DETAILS]") >= 0) {
+    rows = parseCSV(text);
+    var di = -1, i;
+    for (i = 0; i < rows.length; i++) if (trim(rows[i][0]) === "[DETAILS]") { di = i; break; }
+    var g = di >= 0 && rows[di + 1] ? colIndex(rows[di + 1]) : null;
+    if (g && g("Source Well") >= 0 && g("Destination Well") >= 0) { kind = "Echo"; info = ingestEcho(rows); }
+    else { kind = "Plate list"; info = ingestMosaic(rows); }
+  }
   else if (/^\s*<\?xml/.test(text) || text.indexOf("urn:schemas-microsoft-com:office:spreadsheet") >= 0) { kind = "Mosaic"; info = ingestMosaic(parseSheetXML(text)); }
-  else if (text.toLowerCase().indexOf("plate barcode") >= 0) { kind = "Mosaic"; info = ingestMosaic(parseCSV(text)); }
-  else throw new Error("not recognised as an Echo transfer or Mosaic dispatch file");
+  else { kind = /plate barcode/i.test(text) ? "Mosaic" : "Plate list"; info = ingestMosaic(parseCSV(text)); }
   return kind + " · " + info;
+}
+
+function rowsToCSV(rows) {
+  return rows.map(function (r) {
+    return r.map(function (v) { v = v == null ? "" : String(v); return /[",\n\r]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; }).join(",");
+  }).join("\n");
+}
+
+function inflateRaw(bytes) {
+  var ds = new DecompressionStream("deflate-raw");
+  var w = ds.writable.getWriter(); w.write(bytes); w.close();
+  return new Response(ds.readable).arrayBuffer().then(function (b) { return new Uint8Array(b); });
+}
+
+function xlsxSheets(buf) {
+  var u8 = new Uint8Array(buf), dv = new DataView(buf), dec = new TextDecoder("utf-8"), i, entries = {};
+  for (i = u8.length - 22; i >= 0 && dv.getUint32(i, true) !== 0x06054b50; i--);
+  if (i < 0) return Promise.reject(new Error("not a valid .xlsx file"));
+  var n = dv.getUint16(i + 10, true), p = dv.getUint32(i + 16, true), k;
+  for (k = 0; k < n; k++) {
+    var method = dv.getUint16(p + 10, true), csz = dv.getUint32(p + 20, true), nl = dv.getUint16(p + 28, true), el = dv.getUint16(p + 30, true), cl = dv.getUint16(p + 32, true), lo = dv.getUint32(p + 42, true);
+    entries[dec.decode(u8.subarray(p + 46, p + 46 + nl))] = { method: method, csz: csz, lo: lo };
+    p += 46 + nl + el + cl;
+  }
+  function get(path) {
+    var e = entries[path];
+    if (!e) return Promise.resolve(null);
+    var s = e.lo + 30 + dv.getUint16(e.lo + 26, true) + dv.getUint16(e.lo + 28, true), data = u8.subarray(s, s + e.csz);
+    return (e.method === 0 ? Promise.resolve(data) : inflateRaw(data)).then(function (b) { return dec.decode(b); });
+  }
+  function xml(t) { return t ? new DOMParser().parseFromString(t, "text/xml") : null; }
+  function colNum(ref) { var m = /^([A-Z]+)/.exec(ref), c = 0, j; for (j = 0; j < m[1].length; j++) c = c * 26 + m[1].charCodeAt(j) - 64; return c - 1; }
+  return Promise.all([get("xl/workbook.xml"), get("xl/_rels/workbook.xml.rels"), get("xl/sharedStrings.xml")]).then(function (r) {
+    if (!r[0]) throw new Error("not a valid .xlsx file");
+    var wb = xml(r[0]), rels = xml(r[1]), ss = xml(r[2]), strings = [];
+    if (ss) Array.prototype.forEach.call(ss.getElementsByTagName("si"), function (si) {
+      strings.push(Array.prototype.map.call(si.getElementsByTagName("t"), function (t) { return t.textContent; }).join(""));
+    });
+    var targets = {};
+    if (rels) Array.prototype.forEach.call(rels.getElementsByTagName("Relationship"), function (e) { targets[e.getAttribute("Id")] = e.getAttribute("Target"); });
+    var sheets = Array.prototype.map.call(wb.getElementsByTagName("sheet"), function (s) {
+      var id = s.getAttribute("r:id") || s.getAttributeNS("http://schemas.openxmlformats.org/officeDocument/2006/relationships", "id"), t = targets[id] || "";
+      t = t.replace(/^\//, ""); if (t.indexOf("xl/") !== 0) t = "xl/" + t;
+      return { name: s.getAttribute("name"), path: t };
+    });
+    return Promise.all(sheets.map(function (s) { return get(s.path); })).then(function (texts) {
+      return sheets.map(function (s, j) {
+        var d = xml(texts[j]), rows = [];
+        if (!d) return { name: s.name, rows: rows };
+        Array.prototype.forEach.call(d.getElementsByTagName("row"), function (re) {
+          var rn = parseInt(re.getAttribute("r"), 10) - 1, arr = [], cn = 0;
+          Array.prototype.forEach.call(re.getElementsByTagName("c"), function (ce) {
+            var ref = ce.getAttribute("r"), ci = ref ? colNum(ref) : cn, t = ce.getAttribute("t"), vEl = ce.getElementsByTagName("v")[0], val = "";
+            if (t === "inlineStr") val = Array.prototype.map.call(ce.getElementsByTagName("t"), function (x) { return x.textContent; }).join("");
+            else if (vEl) val = t === "s" ? (strings[parseInt(vEl.textContent, 10)] || "") : vEl.textContent;
+            arr[ci] = val; cn = ci + 1;
+          });
+          for (var q = 0; q < arr.length; q++) if (arr[q] === undefined) arr[q] = "";
+          while (rows.length < rn) rows.push([]);
+          rows[rn] = arr;
+        });
+        return { name: s.name, rows: rows };
+      });
+    });
+  });
 }
 
 var loaded = [], nextId = 1;
@@ -270,7 +385,7 @@ function rebuild() {
   $("chips").innerHTML = "";
   loaded.forEach(function (f) {
     try { addChip(f.name + " — " + ingestText(f.name, f.text), false, f.id); }
-    catch (e) { addChip(f.name + " — " + e.message + (/\.xlsx$/i.test(f.name) ? " (save as .xls XML or CSV)" : ""), true, f.id); }
+    catch (e) { addChip(f.name + " — " + e.message, true, f.id); }
   });
   if (loaded.length > 1) {
     var b = document.createElement("a");
@@ -304,8 +419,15 @@ function loadFiles(list) {
   var tab = null;
   if (embedded) { try { tab = window.open(location.href.split("?")[0] + "?tab=1", "_blank"); } catch (err) {} }
   Promise.all(files.map(function (f) {
-    return f.text().then(function (t) { return { name: f.name, text: t }; });
-  })).then(function (res) {
+    if (/\.xlsx$/i.test(f.name)) {
+      return f.arrayBuffer().then(xlsxSheets).then(function (sheets) {
+        sheets = sheets.filter(function (s) { return s.rows.length; });
+        return sheets.map(function (s) { return { name: f.name + (sheets.length > 1 ? " [" + s.name + "]" : ""), text: rowsToCSV(s.rows) }; });
+      }).catch(function (err) { return [{ name: f.name, text: "#xlsxerror:" + err.message }]; });
+    }
+    return f.text().then(function (t) { return [{ name: f.name, text: t }]; });
+  })).then(function (lists) {
+    var res = [].concat.apply([], lists);
     if (tab) {
       pendingTab = tab; pendingFiles = pendingFiles.concat(res);
       $("tabNote").textContent = "Opened in a new tab.";
@@ -323,7 +445,7 @@ function loadFiles(list) {
 
 function lookupMos(bc, well) { var p = plates[bc]; return p && p.mos[well] ? p.mos[well] : null; }
 
-function roleLabel(r) { return r === "dest" ? "Destination (received)" : r === "src" ? "Source (removed)" : "Mosaic dispatch"; }
+function roleLabel(r) { return r === "dest" ? "Destination (received)" : r === "src" ? "Source (removed)" : "Mosaic / plate list"; }
 
 function refreshPlates() {
   var sel = $("plate"), prev = sel.value, opts = [];
