@@ -6,6 +6,8 @@
 <title>Plate Map Viewer</title>
 <style>
   * { box-sizing: border-box; }
+  html, body, * { scrollbar-width: none; -ms-overflow-style: none; }
+  html::-webkit-scrollbar, body::-webkit-scrollbar, *::-webkit-scrollbar { display: none; }
   body { margin: 0; padding: 14px; font-family: "Segoe UI", system-ui, sans-serif; background: #f3f5f9; color: #1f2937; }
   .card { background: #fff; border-radius: 14px; padding: 18px 20px; box-shadow: 0 2px 12px rgba(0,0,0,.08); margin-bottom: 14px; }
   h2 { margin: 0 0 2px; font-size: 22px; }
@@ -58,6 +60,7 @@
   <div id="drop"><b>Click to choose files</b> or drag them here<br><span class="note">Echo transfer file (.csv) and Mosaic dispatch file (.xls / .csv). You can load several at once. Files are read in your browser only; nothing is uploaded.</span></div>
   <input id="file" type="file" multiple accept=".csv,.xls,.xml,.txt" style="display:none">
   <div class="chips" id="chips"></div>
+  <div id="tabNote" class="note" style="display:none;margin-top:8px">Opened in a new tab. If nothing appeared, allow pop-ups for this site and drop the file again.</div>
 </div>
 
 <div class="card" id="viewer" style="display:none">
@@ -281,11 +284,37 @@ function rebuild() {
   refreshPlates();
 }
 
+var embedded = window.top !== window.self;
+var pendingTab = null, pendingFiles = [];
+
+window.addEventListener("message", function (e) {
+  if (e.origin !== location.origin || !e.data) return;
+  if (e.data.type === "pm-ready" && pendingTab && e.source === pendingTab) {
+    pendingTab.postMessage({ type: "pm-files", files: pendingFiles }, location.origin);
+    pendingFiles = [];
+  } else if (e.data.type === "pm-files") {
+    e.data.files.forEach(function (f) { loaded.push({ id: nextId++, name: f.name, text: f.text }); });
+    rebuild();
+  }
+});
+if (window.opener && /[?&]tab=1/.test(location.search)) {
+  try { window.opener.postMessage({ type: "pm-ready" }, location.origin); } catch (err) {}
+}
+
 function loadFiles(list) {
   var files = Array.prototype.slice.call(list);
+  var tab = embedded ? window.open(location.pathname + "?tab=1", "_blank") : null;
   Promise.all(files.map(function (f) {
-    return f.text().then(function (t) { loaded.push({ id: nextId++, name: f.name, text: t }); });
-  })).then(rebuild);
+    return f.text().then(function (t) { return { name: f.name, text: t }; });
+  })).then(function (res) {
+    if (tab) {
+      pendingTab = tab; pendingFiles = pendingFiles.concat(res);
+      $("tabNote").style.display = "";
+      return;
+    }
+    res.forEach(function (f) { loaded.push({ id: nextId++, name: f.name, text: f.text }); });
+    rebuild();
+  });
 }
 
 function lookupMos(bc, well) { var p = plates[bc]; return p && p.mos[well] ? p.mos[well] : null; }
