@@ -535,7 +535,7 @@ function sortedItems(v) { return v.items.slice().sort(function (a, b) { return a
 
 function destBarcodes(views) {
   var seen = {};
-  views.forEach(function (v) { if (v.role === "dest") seen[v.bc] = 1; });
+  views.forEach(function (v) { if (v.role === "dest" || v.role === "mos") seen[v.bc] = 1; });
   return Object.keys(seen).sort();
 }
 
